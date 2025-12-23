@@ -1,0 +1,3061 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSG Закупки</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Drag & Drop зона */
+        .drop-zone {
+            border: 3px dashed #CBD5E1;
+            transition: all 0.3s ease;
+        }
+        .drop-zone.drag-over {
+            border-color: #3B82F6;
+            background-color: #EFF6FF;
+        }
+        .drop-zone:hover {
+            border-color: #94A3B8;
+        }
+
+        /* Статусы */
+        .status-ok { color: #10B981; }
+        .status-warning { color: #F59E0B; }
+        .status-error { color: #EF4444; }
+        .row-error { background-color: #FEF2F2; }
+        .row-warning { background-color: #FFFBEB; }
+
+        /* Спиннер */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner {
+            animation: spin 1s linear infinite;
+            border: 2px solid #E5E7EB;
+            border-top-color: #3B82F6;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+        }
+
+        /* Поля таблицы */
+        .table-input {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #D1D5DB;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .table-input:focus {
+            outline: none;
+            border-color: #3B82F6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+        .table-input:disabled {
+            background-color: #F3F4F6;
+            color: #9CA3AF;
+        }
+        .table-select {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #D1D5DB;
+            border-radius: 4px;
+            font-size: 13px;
+            background: white;
+        }
+
+        /* Скрытие колонок */
+        .col-hidden { display: none; }
+
+        /* Компактная таблица */
+        #positions-table th,
+        #positions-table td {
+            padding: 6px 4px;
+            font-size: 13px;
+        }
+        #positions-table th {
+            white-space: nowrap;
+        }
+
+        /* Стили для запроса поставщикам */
+        .supplier-btn {
+            background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+        .supplier-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+        .supplier-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Компактная карточка результата запроса */
+        .supplier-result-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+            padding: 24px;
+            margin: 20px 0;
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .result-icon {
+            font-size: 40px;
+        }
+
+        .result-info h3 {
+            margin: 0;
+            font-size: 20px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .result-info p {
+            margin: 4px 0 0;
+            color: #666;
+        }
+
+        .result-status {
+            margin-left: auto;
+            background: #d4edda;
+            color: #155724;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+
+        .excel-download-section {
+            padding: 20px 0;
+            text-align: center;
+            border-bottom: 1px solid #eee;
+        }
+
+        .btn-download-excel {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-download-excel:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+        }
+
+        .btn-download-excel:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .excel-hint {
+            display: block;
+            margin-top: 8px;
+            color: #888;
+            font-size: 13px;
+        }
+
+        .send-section {
+            padding-top: 20px;
+        }
+
+        .send-label {
+            text-align: center;
+            color: #666;
+            margin-bottom: 16px;
+        }
+
+        /* Кнопки отправки поставщикам */
+        .supplier-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn-supplier {
+            padding: 15px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            color: white;
+        }
+
+        .btn-supplier:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .btn-supplier:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-nn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .btn-moscow {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .btn-factories {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        .btn-sent {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%) !important;
+        }
+
+        /* Контейнер активных запросов */
+        .active-requests-container {
+            margin-top: 16px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            border: 1px solid #dee2e6;
+        }
+
+        .active-requests-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .active-requests-header h4 {
+            margin: 0;
+            font-size: 14px;
+            color: #495057;
+        }
+
+        .btn-show-more {
+            padding: 4px 12px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .btn-show-more:hover {
+            background: #5a6268;
+        }
+
+        .active-requests-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* Плашка отдельного запроса */
+        .request-card {
+            padding: 12px;
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            border: 2px solid #28a745;
+            border-radius: 10px;
+            animation: slideIn 0.3s ease-out;
+            position: relative;
+        }
+
+        .request-card.ready {
+            background: linear-gradient(135deg, #b8f5c8 0%, #7ddf9c 100%);
+            border-color: #155724;
+            box-shadow: 0 3px 12px rgba(40, 167, 69, 0.25);
+        }
+
+        .request-card.hidden-card {
+            display: none;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .request-card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .request-card-icon {
+            font-size: 22px;
+        }
+
+        .request-card-info {
+            flex: 1;
+        }
+
+        .request-card-info h5 {
+            font-size: 13px;
+            font-weight: 600;
+            color: #155724;
+            margin: 0;
+        }
+
+        .request-card-info p {
+            font-size: 12px;
+            color: #1e7e34;
+            margin: 2px 0 0 0;
+        }
+
+        .request-card-badge {
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .request-card-badge.pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .request-card-badge.ready {
+            background: #155724;
+            color: white;
+        }
+
+        .request-card-badge.downloaded {
+            background: #0d6efd;
+            color: white;
+        }
+
+        .btn-download-request.downloaded {
+            background: #0d6efd !important;
+            color: white !important;
+            cursor: default;
+        }
+
+        .btn-close-card {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            background: rgba(0,0,0,0.1);
+            border: none;
+            border-radius: 50%;
+            font-size: 12px;
+            cursor: pointer;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+
+        .btn-close-card:hover {
+            opacity: 1;
+            background: rgba(0,0,0,0.2);
+        }
+
+        .request-card-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
+        .btn-check-request {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 12px;
+            background: #17a2b8;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-check-request:hover {
+            background: #138496;
+        }
+
+        .btn-check-request:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .btn-download-request {
+            padding: 6px 12px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-download-request:hover:not(:disabled) {
+            background: #218838;
+        }
+
+        .btn-download-request:disabled {
+            background: #94d3a2;
+            color: rgba(255,255,255,0.7);
+            cursor: not-allowed;
+        }
+
+        .request-card-result {
+            margin-top: 8px;
+            padding: 8px;
+            background: rgba(255,255,255,0.7);
+            border-radius: 6px;
+            font-size: 12px;
+            color: #155724;
+        }
+
+        .request-card-result.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .suppliers-list {
+            margin-top: 4px;
+            font-size: 11px;
+            color: #666;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+
+        <!-- Заголовок -->
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">MSG Закупки</h1>
+            <p class="text-gray-500 text-sm">Система управления закупками металлопроката</p>
+            <p class="text-gray-600 mt-2">Загрузите заявку или добавьте позиции вручную</p>
+        </header>
+
+        <!-- Секция загрузки -->
+        <section class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">1. Загрузка заявки</h2>
+
+            <!-- Drag & Drop зона -->
+            <div id="drop-zone" class="drop-zone rounded-lg p-8 text-center mb-4 cursor-pointer"
+                 onclick="document.getElementById('file-input').click()">
+                <input type="file" id="file-input" class="hidden" accept=".txt,.pdf,.xlsx,.xls,.jpg,.jpeg,.png" multiple>
+                <div class="text-gray-500">
+                    <svg class="mx-auto h-12 w-12 text-gray-400 mb-3" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <p class="text-lg font-medium">Перетащите файл сюда</p>
+                    <p class="text-sm mt-1">или нажмите для выбора</p>
+                    <p class="text-xs text-gray-400 mt-2">PDF, XLSX, TXT, JPG, PNG</p>
+                </div>
+            </div>
+
+            <!-- Или текст -->
+            <div class="relative my-4">
+                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-300"></div></div>
+                <div class="relative flex justify-center text-sm"><span class="px-2 bg-white text-gray-500">или вставьте текст</span></div>
+            </div>
+
+            <!-- Textarea -->
+            <textarea
+                id="order-text"
+                rows="5"
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y text-sm"
+                placeholder="Труба профильная 60х40х3 - 100м&#10;Арматура 12 А500С - 2.5т&#10;Лист г/к 5мм 1250х2500 - 10шт"
+            ></textarea>
+
+            <!-- Кнопки -->
+            <div class="flex gap-4 mt-4">
+                <button onclick="parseOrder()" class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+                    <span id="parse-spinner" class="spinner hidden"></span>
+                    <span>Распарсить</span>
+                </button>
+                <button onclick="addEmptyRow()" class="px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition">
+                    + Добавить позицию
+                </button>
+                <button onclick="clearAll()" class="px-6 py-3 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition">
+                    Очистить всё
+                </button>
+            </div>
+        </section>
+
+        <!-- Статус парсинга -->
+        <section id="parse-status" class="hidden bg-white rounded-lg shadow-md p-4 mb-6">
+            <div id="parse-success" class="hidden flex items-center gap-2 text-green-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span>Распознано: <strong id="parsed-count">0</strong> позиций</span>
+            </div>
+            <div id="parse-error" class="hidden flex items-center gap-2 text-red-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span id="error-message">Ошибка</span>
+            </div>
+        </section>
+
+        <!-- Таблица позиций -->
+        <section id="positions-section" class="hidden bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-700">2. Позиции заявки</h2>
+                <span id="positions-count" class="text-sm text-gray-500"></span>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm" id="positions-table">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="px-2 py-2 text-left w-8">#</th>
+                            <th class="px-2 py-2 text-left min-w-[180px]">Тип металла</th>
+                            <th class="px-2 py-2 text-left min-w-[100px]">Размер</th>
+                            <th class="px-2 py-2 text-left w-20">Вес, т</th>
+                            <th class="px-2 py-2 text-left w-20 col-length">Длина, м</th>
+                            <th class="px-2 py-2 text-left w-20 col-pieces">Кол-во, шт</th>
+                            <th class="px-2 py-2 text-left w-24 col-length-piece">Дл. шт, м</th>
+                            <th class="px-2 py-2 text-left w-20 col-width">Ширина, м</th>
+                            <th class="px-2 py-2 text-left w-20 col-length-sheet">Дл. листа, м</th>
+                            <th class="px-2 py-2 text-left w-24 col-steel">Марка стали</th>
+                            <th class="px-2 py-2 text-center w-16">Удалить</th>
+                        </tr>
+                    </thead>
+                    <tbody id="positions-body">
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Кнопки действий -->
+            <div class="mt-4 flex justify-end gap-4">
+                <!-- Скрытая кнопка расчёта (используется автоматически) -->
+                <button id="btn-calculate" onclick="calculateOrder()" class="hidden px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+                    <span id="calc-spinner" class="spinner hidden"></span>
+                    <span>Рассчитать</span>
+                </button>
+                <!-- Основная кнопка - Сформировать запрос -->
+                <button id="btn-supplier-request" onclick="submitSupplierRequest()" class="supplier-btn">
+                    <span id="supplier-spinner" class="spinner hidden"></span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 2L11 13"></path>
+                        <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
+                    </svg>
+                    <span>Сформировать запрос поставщикам</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Итоги расчёта -->
+        <section id="results-section" class="hidden bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">3. Результаты расчёта</h2>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-blue-50 rounded-lg p-4">
+                    <div class="text-sm text-blue-600 font-medium">Общий вес</div>
+                    <div class="text-2xl font-bold text-blue-800"><span id="total-weight">0</span> т</div>
+                </div>
+                <div class="bg-green-50 rounded-lg p-4">
+                    <div class="text-sm text-green-600 font-medium">Общая длина</div>
+                    <div class="text-2xl font-bold text-green-800"><span id="total-length">0</span> м</div>
+                </div>
+                <div class="bg-purple-50 rounded-lg p-4">
+                    <div class="text-sm text-purple-600 font-medium">Позиций</div>
+                    <div class="text-2xl font-bold text-purple-800"><span id="total-items">0</span></div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="text-sm text-gray-600 font-medium">Рассчитано</div>
+                    <div class="text-2xl font-bold text-gray-800"><span id="calc-success">0</span>/<span id="calc-total">0</span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Компактная карточка результата запроса поставщикам -->
+        <div id="supplier-request-result" class="supplier-result-card" style="display: none;">
+            <!-- Заголовок -->
+            <div class="result-header">
+                <div class="result-icon">📋</div>
+                <div class="result-info">
+                    <h3 id="result-request-id">ЗП-20251213-001</h3>
+                    <p id="result-summary">0 позиций • 0 т</p>
+                </div>
+                <div id="result-status" class="result-status">✅ Сформировано</div>
+            </div>
+
+            <!-- Кнопка скачать Excel -->
+            <div class="excel-download-section">
+                <button id="btn-download-excel" class="btn-download-excel" onclick="downloadExcel()">
+                    📥 Скачать Excel для проверки
+                </button>
+                <span class="excel-hint">Откройте файл чтобы убедиться что всё верно</span>
+            </div>
+
+            <!-- Кнопки отправки -->
+            <div class="send-section">
+                <p class="send-label">Отправить запрос:</p>
+                <div class="supplier-buttons">
+                    <button id="btn-send-nn" class="btn-supplier btn-nn" onclick="sendToSuppliers('nn')">
+                        📍 Нижний Новгород
+                    </button>
+                    <button id="btn-send-moscow" class="btn-supplier btn-moscow" onclick="sendToSuppliers('moscow')">
+                        🏙️ Москва и регионы
+                    </button>
+                    <button id="btn-send-factories" class="btn-supplier btn-factories" onclick="sendToSuppliers('factories')">
+                        🏭 Заводы
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Контейнер для списка активных заказов поставщикам (ВЫНЕСЕН НАРУЖУ!) -->
+        <div id="active-requests-container" class="active-requests-container" style="display: none;">
+            <div class="active-requests-header">
+                <h4>📊 Активные запросы поставщикам</h4>
+                <button id="btn-show-more-requests" class="btn-show-more" style="display: none;" onclick="toggleMoreRequests()">
+                    Показать ещё (<span id="hidden-requests-count">0</span>)
+                </button>
+            </div>
+            <div id="active-requests-list" class="active-requests-list">
+                <!-- Плашки будут добавляться динамически -->
+            </div>
+        </div>
+
+        <footer class="text-center text-gray-500 text-sm mt-8">
+            <p>MSG Закупки v4.24</p>
+        </footer>
+    </div>
+
+    <!-- Калькулятор (содержит функцию calculateMetal) -->
+    <script src="calculator.browser.js"></script>
+
+    <!-- JavaScript -->
+    <script>
+    // ============================================================
+    // КОНФИГУРАЦИЯ
+    // ============================================================
+    const CONFIG = {
+        API_BASE: 'https://primary-production-4e88.up.railway.app/webhook',
+        ENDPOINTS: {
+            PARSE: '/calc-parse',
+            PARSE_FILE: '/calc-parse-file',
+            CALCULATE: '/calc-calculate'
+        },
+        METALS_DB_URL: 'https://raw.githubusercontent.com/lamblackout/metal-calculator/main/docs/database/metals.json'
+    };
+
+    // ============================================================
+    // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ АКТИВНЫХ ЗАЯВОК (должны быть в начале!)
+    // ============================================================
+    const ACTIVE_REQUESTS_KEY = 'metalCalc_activeRequests';
+    const MAX_VISIBLE_REQUESTS = 5;
+    let activeRequests = [];
+    let requestTimers = {}; // Таймеры для каждого запроса
+    let requestSummaryData = {}; // Данные сводок для скачивания
+    let notifiedRequests = new Set(); // Заявки для которых уже проигран звук
+
+    // ============================================================
+    // ТИПЫ МЕТАЛЛОВ И ИХ ПОЛЯ (из оригинального калькулятора)
+    // ============================================================
+
+    // Типы с полем "Длина 1 шт"
+    const TYPES_WITH_LENGTH_PIECE = [
+        'armature_a1', 'armature_a1_galv', 'armature_a3', 'armature_a3_galv',
+        'armature_at800', 'armature_at1000',
+        'beam', 'wire_rod', 'square',
+        'circle', 'circle_galv',
+        'strip', 'strip_galv', 'bulb_flat',
+        'rels',
+        'tryba_vgp', 'tryba_vgp_ocink', 'tryba_pnd',
+        'tryba_gd', 'tryba_gd_ocink', 'tryba_bs_kotelnaya',
+        'tryba_xd', 'tryba_xd_ocink',
+        'tryba_es_kvadr', 'tryba_es_kvadr_ocink',
+        'tryba_es_oval', 'tryba_es_oval_ocink',
+        'tryba_es_ploskooval', 'tryba_es_ploskooval_ocink',
+        'tryba_es_pr', 'tryba_es_pr_ocink',
+        'tryba_es', 'tryba_es_ocink',
+        'ygolok', 'ygolok_gnyt', 'ygolok_gnyt_ocink', 'ygolok_ocink',
+        'shveller', 'shveller_gnyt', 'shveller_gnyt_ocink', 'shveller_ocink',
+        'shestigrannik'
+    ];
+
+    // Типы БЕЗ поля "Количество штук" (только Вес и Длина)
+    const TYPES_WITHOUT_PIECES = [
+        'rope', 'rope_armature', 'rope_galv',
+        'wire', 'wire_galv',
+        'profnastil_okrash', 'profnastil_ocink',
+        'sytynka',
+        'shpynt_dvutavroviy', 'shpynt_larsen', 'shpynt_pvh',
+        'shpynt_trubchatiy', 'shpynt_holodnognutiy'
+    ];
+
+    // Крепежи (только Вес и Количество, БЕЗ поля Длина)
+    const FASTENER_TYPES = [
+        'bolt', 'screw', 'nut', 'nail', 'selftapping',
+        'washer', 'stud', 'cotter', 'woodscrew'
+    ];
+
+    // Листовые типы (Ширина и Длина листа вместо Длины)
+    const SHEET_TYPES = [
+        'sheet_hot', 'sheet_cold', 'sheet_galv', 'sheet_painted',
+        'sheet_riffle', 'sheet_pv', 'sheet_korr', 'sheet_pvl',
+        'plate_hot', 'plate_cold',
+        'tape', 'tape_galv', 'tape_cold'
+    ];
+
+    // Стандартные длины для типов
+    const STANDARD_LENGTHS = {
+        'armature_a1': [6, 11.7], 'armature_a1_galv': [6, 11.7],
+        'armature_a3': [6, 11.7], 'armature_a3_galv': [6, 11.7],
+        'armature_at800': [6, 9.9, 10, 11.7], 'armature_at1000': [6, 9.9, 10, 11.7],
+        'beam': [12],
+        'wire_rod': [6, 11.7],
+        'shveller': [6, 12], 'shveller_ocink': [6, 12],
+        'shveller_gnyt': [3, 6, 12], 'shveller_gnyt_ocink': [3, 6, 12],
+        'tryba_vgp': [6, 7.8, 10], 'tryba_vgp_ocink': [6, 7.8, 10],
+        'tryba_es_kvadr': [6, 12], 'tryba_es_kvadr_ocink': [6, 12],
+        'tryba_es_pr': [6, 12], 'tryba_es_pr_ocink': [6, 12],
+        'tryba_es': [6, 10, 11.7, 12], 'tryba_es_ocink': [6, 10, 11.7, 12],
+        'square': [6],
+        'circle': [6], 'circle_galv': [6],
+        'strip': [6], 'strip_galv': [6], 'bulb_flat': [6],
+        'ygolok': [6, 12], 'ygolok_ocink': [6, 12],
+        'ygolok_gnyt': [6, 12], 'ygolok_gnyt_ocink': [6, 12],
+        'shestigrannik': [6],
+        'rels': [12.5, 25]
+    };
+
+    // Марки стали с плотностью
+    const STEEL_GRADES = [
+        { value: 'ст3', name: 'ст3', density: 7.85 },
+        { value: 'ст0', name: 'ст0', density: 7.85 },
+        { value: 'ст10', name: 'ст10', density: 7.856 },
+        { value: 'ст20', name: 'ст20', density: 7.859 },
+        { value: 'ст35', name: 'ст35', density: 7.826 },
+        { value: 'ст45', name: 'ст45', density: 7.826 },
+        { value: '09Г2С', name: '09Г2С', density: 7.85 },
+        { value: '40Х', name: '40Х', density: 7.85 },
+        { value: '65Г', name: '65Г', density: 7.85 }
+    ];
+
+    // ✅ Дефолтные размеры листов из базы данных
+    // Для листов standardSizes = [[ширина_мм, длина_мм], ...], например [[1250, 2500]]
+    // Возвращаем в метрах
+    function getDefaultSheetWidth(metalKey) {
+        if (!metalKey || !SHEET_TYPES.includes(metalKey)) return '';
+        const metal = state.metalsDB?.[metalKey];
+        if (!metal?.standardSizes?.length) return 1.25; // Дефолт 1.25м
+        const firstSize = metal.standardSizes[0];
+        if (Array.isArray(firstSize) && firstSize.length >= 1) {
+            return firstSize[0] / 1000; // мм → м
+        }
+        return 1.25;
+    }
+
+    function getDefaultSheetLength(metalKey) {
+        if (!metalKey || !SHEET_TYPES.includes(metalKey)) return '';
+        const metal = state.metalsDB?.[metalKey];
+        if (!metal?.standardSizes?.length) return 2.5; // Дефолт 2.5м
+        const firstSize = metal.standardSizes[0];
+        if (Array.isArray(firstSize) && firstSize.length >= 2) {
+            return firstSize[1] / 1000; // мм → м
+        }
+        return 2.5;
+    }
+
+    // ============================================================
+    // СОСТОЯНИЕ
+    // ============================================================
+    let state = {
+        items: [],
+        metalsDB: null,
+        metalsList: [],
+        calcResults: null
+    };
+
+    // ============================================================
+    // ИНИЦИАЛИЗАЦИЯ
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', async () => {
+        console.log('🚀 DOMContentLoaded started');
+
+        // СНАЧАЛА загружаем активные заявки (не зависят от калькулятора!)
+        console.log('🚀 Инициализация активных заявок...');
+        console.log('📦 ACTIVE_REQUESTS_KEY:', ACTIVE_REQUESTS_KEY);
+        console.log('📦 localStorage raw:', localStorage.getItem(ACTIVE_REQUESTS_KEY));
+        loadActiveRequests();
+        console.log('📦 activeRequests после загрузки:', activeRequests);
+        renderActiveRequests();
+
+        localStorage.removeItem('metalCalcState'); // Чистая страница при загрузке
+
+        // Проверяем, что calculator.browser.js загрузился
+        if (typeof window.calculateMetal !== 'function') {
+            console.error('❌ ОШИБКА: window.calculateMetal не найдена! Проверьте загрузку calculator.browser.js');
+            alert('Ошибка: калькулятор не загружен. Проверьте консоль.');
+            return;
+        }
+        console.log('✅ calculateMetal доступна');
+
+        await loadMetalsDatabase();
+        setupDragAndDrop();
+
+        // Тестовый вызов для проверки работы калькулятора
+        testCalculations();
+    });
+
+    function testCalculations() {
+        if (!state.metalsDB) return;
+        const metalDatabase = { metals: state.metalsDB };
+
+        // Тест 1: Лист г/к толщина 8мм, вес 0.283т
+        const testSheet = window.calculateMetal({
+            metalType: 'sheet_hot',
+            size: 8,
+            weight: 0.283,
+            steelType: 'ст3'
+        }, metalDatabase);
+        console.log('🧪 ТЕСТ Лист 8мм 0.283т:', testSheet);
+
+        // Тест 2: Балка 40Ш1, вес 1т
+        const testBeam = window.calculateMetal({
+            metalType: 'beam',
+            size: '40Ш1',
+            weight: 1,
+            steelType: 'ст3'
+        }, metalDatabase);
+        console.log('🧪 ТЕСТ Балка 40Ш1 1т:', testBeam);
+    }
+
+    async function loadMetalsDatabase() {
+        try {
+            const response = await fetch(CONFIG.METALS_DB_URL);
+            const data = await response.json();
+            state.metalsDB = data.metals;
+
+            // Создаём список для dropdown с группировкой по категориям
+            const categories = {};
+            for (const [key, metal] of Object.entries(data.metals)) {
+                const cat = metal.category || 'Другое';
+                if (!categories[cat]) categories[cat] = [];
+                categories[cat].push({ key, name: metal.name || key, metal });
+            }
+
+            // Сортируем категории
+            const catOrder = [
+                'Арматура', 'Балка', 'Канат', 'Катанка', 'Квадрат', 'Крепеж', 'Круг',
+                'Лента/штрипс', 'Лист/рулон', 'Плита', 'Полоса', 'Полособульб', 'Проволока',
+                'Профнастил', 'Рельс', 'Сутунка', 'Труба', 'Уголок', 'Швеллер',
+                'Шестигранник', 'Шпунт'
+            ];
+
+            state.metalsList = [];
+            for (const cat of catOrder) {
+                if (categories[cat]) {
+                    categories[cat].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+                    for (const m of categories[cat]) {
+                        state.metalsList.push({ ...m, category: cat });
+                    }
+                }
+            }
+            // Добавляем остальные категории
+            for (const [cat, metals] of Object.entries(categories)) {
+                if (!catOrder.includes(cat)) {
+                    metals.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+                    for (const m of metals) {
+                        state.metalsList.push({ ...m, category: cat });
+                    }
+                }
+            }
+
+            console.log(`Загружено ${state.metalsList.length} типов металла`);
+        } catch (e) {
+            console.error('Ошибка загрузки базы:', e);
+        }
+    }
+
+    // ============================================================
+    // ПОЛУЧЕНИЕ РАЗМЕРОВ ДЛЯ ТИПА МЕТАЛЛА
+    // ============================================================
+    function getSizesForMetal(metalKey) {
+        const metal = state.metalsDB?.[metalKey];
+        if (!metal) return [];
+
+        // Приоритет: sizes > thicknesses > railTypes > weights keys
+        if (metal.sizes && metal.sizes.length > 0) {
+            return metal.sizes.map(s => {
+                if (Array.isArray(s)) return s.join('×');
+                return String(s);
+            });
+        }
+        if (metal.thicknesses && metal.thicknesses.length > 0) {
+            return metal.thicknesses.map(t => String(t));
+        }
+        if (metal.railTypes && metal.railTypes.length > 0) {
+            return metal.railTypes;
+        }
+        if (metal.weights && Object.keys(metal.weights).length > 0) {
+            return Object.keys(metal.weights);
+        }
+        return [];
+    }
+
+    // ============================================================
+    // ОПРЕДЕЛЕНИЕ ТИПА ПОЛЕЙ
+    // ============================================================
+    function getFieldsConfig(metalKey) {
+        const isSheet = SHEET_TYPES.includes(metalKey);
+        const isFastener = FASTENER_TYPES.includes(metalKey);
+        const hasLengthPiece = TYPES_WITH_LENGTH_PIECE.includes(metalKey);
+        const noPieces = TYPES_WITHOUT_PIECES.includes(metalKey);
+
+        return {
+            showWeight: true,  // Вес всегда
+            showLength: !isSheet && !isFastener,  // Длина (не для листов и крепежа)
+            showPieces: !noPieces,  // Штуки (не для канатов, проволоки и т.д.)
+            showLengthPiece: hasLengthPiece && !isSheet,  // Длина 1 шт
+            showWidth: isSheet,  // Ширина листа
+            showLengthSheet: isSheet,  // Длина листа
+            showSteel: true,  // Марка стали всегда
+            isSheet,
+            isFastener
+        };
+    }
+
+    // ============================================================
+    // DRAG & DROP
+    // ============================================================
+    function setupDragAndDrop() {
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, e => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('drag-over'));
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('drag-over'));
+        });
+
+        dropZone.addEventListener('drop', e => {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) handleFiles(files);
+        });
+
+        fileInput.addEventListener('change', e => {
+            if (e.target.files.length > 0) handleFiles(e.target.files);
+        });
+    }
+
+    async function handleFiles(files) {
+        const file = files[0];
+        const ext = file.name.split('.').pop().toLowerCase();
+
+        showSpinner('parse-spinner', true);
+
+        try {
+            if (ext === 'txt') {
+                const text = await file.text();
+                document.getElementById('order-text').value = text;
+                await parseOrder();
+            } else if (CONFIG.API_BASE) {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch(CONFIG.API_BASE + CONFIG.ENDPOINTS.PARSE_FILE, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success && data.items) {
+                    console.log('📥 Данные от парсера:', JSON.stringify(data.items, null, 2));
+                    state.items = data.items.map((item, i) => normalizeItem(item, i));
+                    console.log('📊 После нормализации:', JSON.stringify(state.items, null, 2));
+                    renderTable();
+                    showParseSuccess(state.items.length);
+                    // Автоматический расчёт
+                    setTimeout(() => calculateOrder(), 100);
+                } else {
+                    showParseError(data.error || 'Ошибка парсинга файла');
+                }
+            } else {
+                alert('Для парсинга PDF/XLSX/изображений требуется подключение к n8n');
+            }
+        } catch (e) {
+            showParseError(e.message);
+        } finally {
+            showSpinner('parse-spinner', false);
+        }
+    }
+
+    // ============================================================
+    // ПАРСИНГ
+    // ============================================================
+    async function parseOrder() {
+        const text = document.getElementById('order-text').value.trim();
+        if (!text) {
+            alert('Введите текст заявки');
+            return;
+        }
+
+        showSpinner('parse-spinner', true);
+
+        try {
+            let items;
+
+            if (CONFIG.API_BASE) {
+                const response = await fetch(CONFIG.API_BASE + CONFIG.ENDPOINTS.PARSE, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+                const data = await response.json();
+                items = data.items || [];
+            } else {
+                items = parseLocalOrder(text);
+            }
+
+            console.log('📥 Данные от парсера:', JSON.stringify(items, null, 2));
+            state.items = items.map((item, i) => normalizeItem(item, i));
+            console.log('📊 После нормализации:', JSON.stringify(state.items, null, 2));
+            saveState();
+            renderTable();
+            showParseSuccess(state.items.length);
+            // Автоматический расчёт
+            setTimeout(() => calculateOrder(), 100);
+
+        } catch (e) {
+            showParseError(e.message);
+        } finally {
+            showSpinner('parse-spinner', false);
+        }
+    }
+
+    // ============================================================
+    // ПОИСК ТИПА МЕТАЛЛА (fuzzy matching)
+    // ============================================================
+    function findMetalType(name) {
+        if (!name || !state.metalsDB) return null;
+
+        const nameLower = name.toLowerCase();
+
+        // ✅ СПЕЦИАЛЬНЫЕ ПРАВИЛА для часто встречающихся названий
+
+        // ЛИСТЫ - важно различать г/к, х/к, оцинк и т.д.
+        if (nameLower.includes('лист') || nameLower.includes('рулон')) {
+            // Лист рифленый
+            if (nameLower.includes('рифл')) {
+                console.log(`📋 "Лист" распознан как Лист рифленый`);
+                return { key: 'sheet_checkered', name: 'Лист рифленый' };
+            }
+            // Лист ПВ оцинкованный
+            if (nameLower.includes('пв') && (nameLower.includes('оцинк') || nameLower.includes('оц'))) {
+                console.log(`📋 "Лист" распознан как Лист ПВ оцинк.`);
+                return { key: 'sheet_pv_galv', name: 'Лист ПВ оцинк.' };
+            }
+            // Лист ПВ
+            if (nameLower.includes('пв')) {
+                console.log(`📋 "Лист" распознан как Лист ПВ`);
+                return { key: 'sheet_pv', name: 'Лист ПВ' };
+            }
+            // Лист оцинкованный
+            if (nameLower.includes('оцинк') || nameLower.match(/\bоц\b/)) {
+                console.log(`📋 "Лист" распознан как Лист/рулон оцинк.`);
+                return { key: 'sheet_galv', name: 'Лист/рулон оцинк.' };
+            }
+            // Лист окрашенный
+            if (nameLower.includes('окраш') || nameLower.includes('крашен')) {
+                console.log(`📋 "Лист" распознан как Лист/рулон окраш.`);
+                return { key: 'sheet_painted', name: 'Лист/рулон окраш.' };
+            }
+            // Лист холоднокатаный
+            if (nameLower.includes('х/к') || nameLower.includes('хк') || nameLower.includes('холодн')) {
+                console.log(`📋 "Лист" распознан как Лист/рулон х/к`);
+                return { key: 'sheet_cold', name: 'Лист/рулон х/к' };
+            }
+            // Лист горячекатаный (по умолчанию для листов)
+            console.log(`📋 "Лист" распознан как Лист/рулон г/к (по умолчанию)`);
+            return { key: 'sheet_hot', name: 'Лист/рулон г/к' };
+        }
+
+        // БАЛКИ
+        if (nameLower.includes('балк') || nameLower.includes('двутавр')) {
+            console.log(`📋 "Балка" распознан как Балка`);
+            return { key: 'beam', name: 'Балка' };
+        }
+
+        // ШВЕЛЛЕРЫ
+        if (nameLower.includes('швеллер')) {
+            if (nameLower.includes('оцинк') || nameLower.includes('оц')) {
+                console.log(`📋 "Швеллер" распознан как Швеллер оцинк.`);
+                return { key: 'shveller_ocink', name: 'Швеллер оцинк.' };
+            }
+            console.log(`📋 "Швеллер" распознан как Швеллер`);
+            return { key: 'shveller', name: 'Швеллер' };
+        }
+
+        // Профиль = профильная труба (квадратная или прямоугольная)
+        if (nameLower.includes('профиль')) {
+            // Извлекаем размеры: "Профиль 180x180x6" или "Профиль 140x7" (сокращённый)
+            const sizeMatch = nameLower.match(/(\d+)[xхX×](\d+)(?:[xхX×](\d+))?/);
+            if (sizeMatch) {
+                const a = parseInt(sizeMatch[1]);
+                const b = parseInt(sizeMatch[2]);
+                const c = sizeMatch[3] ? parseInt(sizeMatch[3]) : null;
+
+                // ✅ ЛОГИКА ОПРЕДЕЛЕНИЯ ТИПА ТРУБЫ:
+                // 1. "140х140х7" (3 числа, a==b) → квадратная
+                // 2. "140х7" (2 числа, b≤12) → сокращённый формат КВАДРАТНОЙ трубы (140х140х7)
+                // 3. "180х140х6" (3 числа, a≠b) → прямоугольная
+                // 4. "180х140" (2 числа, b>12) → прямоугольная (без толщины)
+
+                if (c !== null) {
+                    // 3 числа: AxBxT
+                    if (a === b) {
+                        console.log(`📐 "Профиль" распознан как Труба квадр. (${a}x${b}x${c})`);
+                        return { key: 'tryba_es_kvadr', name: 'Труба квадр.' };
+                    } else {
+                        console.log(`📐 "Профиль" распознан как Труба прямоуг. (${a}x${b}x${c})`);
+                        return { key: 'tryba_es_pr', name: 'Труба прямоуг.' };
+                    }
+                } else {
+                    // 2 числа: AxT (сокращённый) или AxB (без толщины)
+                    if (b <= 12) {
+                        // b это толщина стенки → сокращённый формат КВАДРАТНОЙ трубы
+                        console.log(`📐 "Профиль" распознан как Труба квадр. (сокращ. ${a}x${b} → ${a}x${a}x${b})`);
+                        return { key: 'tryba_es_kvadr', name: 'Труба квадр.' };
+                    } else {
+                        // b это вторая сторона → прямоугольная (без толщины)
+                        console.log(`📐 "Профиль" распознан как Труба прямоуг. (${a}x${b})`);
+                        return { key: 'tryba_es_pr', name: 'Труба прямоуг.' };
+                    }
+                }
+            }
+        }
+
+        // Сокращения
+        const ABBR = {
+            'э/с': 'электросварн', 'эс': 'электросварн',
+            'б/ш': 'бесшовн', 'бш': 'бесшовн',
+            'г/к': 'горячекатан', 'гк': 'горячекатан',
+            'х/к': 'холоднокатан', 'хк': 'холоднокатан',
+            'оц': 'оцинк', 'вгп': 'водогазопровод',
+            'проф': 'профильн', 'пр': 'прямоугольн',
+            'кв': 'квадратн', 'дв': 'двутавр'
+        };
+
+        let expanded = nameLower;
+        for (const [short, full] of Object.entries(ABBR)) {
+            expanded = expanded.replace(new RegExp(short, 'gi'), full);
+        }
+
+        // Точное совпадение
+        for (const [key, metal] of Object.entries(state.metalsDB)) {
+            if (metal.name?.toLowerCase() === nameLower) {
+                return { key, name: metal.name };
+            }
+        }
+
+        // Поиск по ключевым словам
+        const keywords = expanded
+            .replace(/\d+[xхX×*]\d+([xхX×*]\d+)?/g, '')
+            .replace(/\d+([.,]\d+)?/g, '')
+            .replace(/[^\wа-яё]/gi, ' ')
+            .split(/\s+/)
+            .filter(w => w.length > 2);
+
+        let bestMatch = null;
+        let bestScore = 0;
+
+        for (const [key, metal] of Object.entries(state.metalsDB)) {
+            const metalName = (metal.name || '').toLowerCase();
+            let score = 0;
+
+            for (const kw of keywords) {
+                if (metalName.includes(kw)) score += kw.length * 2;
+                if (key.toLowerCase().includes(kw)) score += kw.length;
+            }
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestMatch = { key, name: metal.name };
+            }
+        }
+
+        return bestScore >= 5 ? bestMatch : null;
+    }
+
+    function normalizeItem(item, index) {
+        let metalKey = item.metal_key;
+        let metalName = item.metal_name || item.name || '';
+
+        // Автопоиск типа
+        if (!metalKey && metalName && state.metalsDB) {
+            const found = findMetalType(metalName);
+            if (found) metalKey = found.key;
+        }
+
+        // Определяем конфиг полей
+        const config = getFieldsConfig(metalKey);
+
+        // Извлекаем размер из названия если не указан
+        let size = item.size || '';
+        if (!size && metalName) {
+            const match = metalName.match(/(\d+(?:[.,]\d+)?)[хx×*](\d+(?:[.,]\d+)?)(?:[хx×*](\d+(?:[.,]\d+)?))?/);
+            if (match) size = match[0].replace(/[xX*×]/g, 'х');
+            else {
+                const single = metalName.match(/\b(\d+(?:[.,]\d+)?)\s*(?:мм)?\b/);
+                if (single) size = single[1];
+            }
+        }
+
+        // Стандартная длина штуки
+        let lengthPiece = item.length_per_piece || '';
+        if (!lengthPiece && metalKey && STANDARD_LENGTHS[metalKey]) {
+            lengthPiece = STANDARD_LENGTHS[metalKey][0];
+        }
+
+        // Функция для парсинга числа из строки (убирает единицы измерения и запятые)
+        const parseNum = (val) => {
+            if (!val && val !== 0) return '';
+            if (typeof val === 'number') return val;
+            // Убираем единицы и парсим: "231 м" -> 231, "4,5м.кв" -> 4.5, "20,467" -> 20.467
+            const str = String(val).replace(/[^\d,.\-]/g, '').replace(',', '.');
+            const num = parseFloat(str);
+            return isNaN(num) ? '' : num;
+        };
+
+        // Маппинг полей из разных форматов парсинга
+        const rawWeight = parseNum(item.weight || item.tons || item.weight_tons || item.тонны || item.вес || item.Тн);
+        const rawLength = parseNum(item.length || item.meters || item.length_meters || item.метры || item.длина || item.Метры);
+        const rawPieces = parseNum(item.pieces || item.count || item.шт || item.штуки);
+        const rawQuantity = parseNum(item.quantity || item.количество);
+
+        // Определяем единицу измерения
+        let unit = (item.unit || item.единица || '').toLowerCase();
+        if (!unit && item.quantity) {
+            // Пробуем определить из строки количества
+            const qtyStr = String(item.quantity || '').toLowerCase();
+            if (qtyStr.includes('т') || qtyStr.includes('тн')) unit = 'тн';
+            else if (qtyStr.includes('м²') || qtyStr.includes('м.кв') || qtyStr.includes('кв')) unit = 'м²';
+            else if (qtyStr.includes('шт')) unit = 'шт';
+            else if (qtyStr.includes('м')) unit = 'м';
+        }
+
+        // Заполняем поля на основе quantity + unit
+        let weight = rawWeight;
+        let length = rawLength;
+        let pieces = rawPieces;
+
+        if (rawQuantity && !weight && !length && !pieces) {
+            // Есть только quantity - распределяем по unit
+            if (unit === 'тн' || unit === 'т') {
+                weight = rawQuantity;
+            } else if (unit === 'м' || unit === 'метр') {
+                length = rawQuantity;
+            } else if (unit === 'шт' || unit === 'штук') {
+                pieces = rawQuantity;
+            } else if (unit === 'м²' || unit === 'м.кв') {
+                // Для м² сохраняем как площадь, позже пересчитаем
+                length = rawQuantity; // временно
+            } else {
+                // По умолчанию - штуки
+                pieces = rawQuantity;
+            }
+        }
+
+        // ✅ ИСХОДНЫЙ ВЕС из заявки - хранится отдельно и НИКОГДА не перезаписывается
+        // Это "священное" значение от которого всегда ведётся пересчёт
+        const originalWeight = item.original_weight !== undefined
+            ? item.original_weight
+            : (weight || rawQuantity || null);
+
+        return {
+            index: index + 1,
+            metal_key: metalKey || '',
+            metal_name: metalName,
+            size: size,
+            weight: weight,
+            length: length,
+            pieces: pieces,
+            quantity: rawQuantity || '',
+            unit: unit || 'шт',
+            length_per_piece: lengthPiece,
+            // ✅ Для листов: дефолтные размеры из standardSizes базы данных
+            width: item.width || item.ширина || getDefaultSheetWidth(metalKey),
+            length_sheet: item.length_sheet || item.длина_листа || getDefaultSheetLength(metalKey),
+            steel_grade: item.steel_grade || item.марка_стали || 'ст3',
+            raw_text: item.raw_text || metalName,
+            original_weight: originalWeight,  // ✅ Исходный вес из заявки
+            _config: config
+        };
+    }
+
+    function parseLocalOrder(text) {
+        const lines = text.split('\n').filter(l => l.trim());
+        return lines.map((line, i) => ({ name: line.trim(), raw_text: line }));
+    }
+
+    // ============================================================
+    // ТАБЛИЦА
+    // ============================================================
+    function renderTable() {
+        const tbody = document.getElementById('positions-body');
+        tbody.innerHTML = '';
+
+        state.items.forEach((item, i) => {
+            tbody.appendChild(createRow(item, i));
+        });
+
+        document.getElementById('positions-section').classList.remove('hidden');
+        document.getElementById('positions-count').textContent = `${state.items.length} позиций`;
+
+        updateColumnVisibility();
+    }
+
+    function createRow(item, index) {
+        const tr = document.createElement('tr');
+        tr.className = 'border-b hover:bg-gray-50';
+        tr.dataset.index = index;
+
+        const config = item._config || getFieldsConfig(item.metal_key);
+        const sizes = getSizesForMetal(item.metal_key);
+        const sizeInList = sizes.includes(String(item.size));
+        const standardLengths = STANDARD_LENGTHS[item.metal_key] || [];
+
+        // Определяем выбран ли металл в базе
+        const metalInDB = item.metal_key && state.metalsDB?.[item.metal_key];
+
+        tr.innerHTML = `
+            <td class="px-2 py-2 text-gray-500">${item.index}</td>
+
+            <!-- Тип металла -->
+            <td class="px-2 py-2">
+                <select class="table-select" onchange="onMetalChange(${index}, this.value)">
+                    <option value="">${item.metal_name && !metalInDB ? item.metal_name + ' (?)' : '-- Выберите --'}</option>
+                    ${renderMetalOptions(item.metal_key)}
+                </select>
+                ${item.metal_name && !metalInDB ? `<div class="text-xs text-orange-600 mt-1">${item.metal_name}</div>` : ''}
+            </td>
+
+            <!-- Размер -->
+            <td class="px-2 py-2">
+                ${sizes.length > 0 ? `
+                    <select class="table-select" onchange="onSizeChange(${index}, this.value)">
+                        <option value="">-- Размер --</option>
+                        ${sizes.map(s => `<option value="${s}" ${String(s) === String(item.size) ? 'selected' : ''}>${s}</option>`).join('')}
+                        <option value="_custom" ${item.size && !sizeInList ? 'selected' : ''}>Другой...</option>
+                    </select>
+                    ${item.size && !sizeInList ? `<input type="text" class="table-input mt-1" value="${item.size}" onchange="onFieldChange(${index}, 'size', this.value)">` : ''}
+                ` : `
+                    <input type="text" class="table-input" value="${item.size || ''}" placeholder="размер" onchange="onFieldChange(${index}, 'size', this.value)">
+                `}
+            </td>
+
+            <!-- Вес -->
+            <td class="px-2 py-2">
+                <input type="number" class="table-input" value="${item.weight}" step="0.001" placeholder="0.000"
+                       onchange="onFieldChange(${index}, 'weight', this.value)">
+            </td>
+
+            <!-- Длина -->
+            <td class="px-2 py-2 col-length">
+                <input type="number" class="table-input" value="${item.length}" step="0.01" placeholder="0.00"
+                       onchange="onFieldChange(${index}, 'length', this.value)"
+                       ${!config.showLength ? 'disabled' : ''}>
+            </td>
+
+            <!-- Количество штук -->
+            <td class="px-2 py-2 col-pieces">
+                <input type="number" class="table-input" value="${item.pieces}" step="1" placeholder="0"
+                       onchange="onFieldChange(${index}, 'pieces', this.value)"
+                       ${!config.showPieces ? 'disabled' : ''}>
+            </td>
+
+            <!-- Длина 1 шт -->
+            <td class="px-2 py-2 col-length-piece">
+                ${standardLengths.length > 0 ? `
+                    <select class="table-select" onchange="onFieldChange(${index}, 'length_per_piece', this.value)">
+                        ${standardLengths.map(l => `<option value="${l}" ${String(l) === String(item.length_per_piece) ? 'selected' : ''}>${l} м</option>`).join('')}
+                        <option value="custom">н/д</option>
+                    </select>
+                ` : `
+                    <input type="number" class="table-input" value="${item.length_per_piece}" step="0.1" placeholder="6"
+                           onchange="onFieldChange(${index}, 'length_per_piece', this.value)"
+                           ${!config.showLengthPiece ? 'disabled' : ''}>
+                `}
+            </td>
+
+            <!-- Ширина -->
+            <td class="px-2 py-2 col-width">
+                <input type="number" class="table-input" value="${item.width}" step="0.01" placeholder="1.25"
+                       onchange="onFieldChange(${index}, 'width', this.value)"
+                       ${!config.showWidth ? 'disabled' : ''}>
+            </td>
+
+            <!-- Длина листа -->
+            <td class="px-2 py-2 col-length-sheet">
+                <input type="number" class="table-input" value="${item.length_sheet}" step="0.01" placeholder="2.5"
+                       onchange="onFieldChange(${index}, 'length_sheet', this.value)"
+                       ${!config.showLengthSheet ? 'disabled' : ''}>
+            </td>
+
+            <!-- Марка стали -->
+            <td class="px-2 py-2 col-steel">
+                <select class="table-select" onchange="onFieldChange(${index}, 'steel_grade', this.value)">
+                    ${STEEL_GRADES.map(g => `<option value="${g.value}" ${g.value === item.steel_grade ? 'selected' : ''}>${g.name}</option>`).join('')}
+                </select>
+            </td>
+
+            <!-- Удалить -->
+            <td class="px-2 py-2 text-center">
+                <button onclick="removeRow(${index})" class="text-red-500 hover:text-red-700" title="Удалить">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                </button>
+            </td>
+        `;
+
+        return tr;
+    }
+
+    function renderMetalOptions(selectedKey) {
+        let html = '';
+        let currentCat = '';
+
+        for (const m of state.metalsList) {
+            if (m.category !== currentCat) {
+                if (currentCat) html += '</optgroup>';
+                html += `<optgroup label="${m.category}">`;
+                currentCat = m.category;
+            }
+            html += `<option value="${m.key}" ${m.key === selectedKey ? 'selected' : ''}>${m.name}</option>`;
+        }
+        if (currentCat) html += '</optgroup>';
+
+        return html;
+    }
+
+    function updateColumnVisibility() {
+        // Определяем какие типы есть в списке
+        let hasSheet = false, hasRod = false, hasFastener = false, hasLengthPiece = false;
+
+        for (const item of state.items) {
+            const config = item._config || getFieldsConfig(item.metal_key);
+            if (config.isSheet) hasSheet = true;
+            if (config.isFastener) hasFastener = true;
+            if (config.showLength) hasRod = true;
+            if (config.showLengthPiece) hasLengthPiece = true;
+        }
+
+        // Показываем/скрываем колонки в заголовке
+        document.querySelectorAll('th.col-length, td.col-length').forEach(el => {
+            el.classList.toggle('col-hidden', !hasRod && !hasSheet);
+        });
+        document.querySelectorAll('th.col-pieces, td.col-pieces').forEach(el => {
+            el.classList.toggle('col-hidden', false); // Всегда показываем
+        });
+        document.querySelectorAll('th.col-length-piece, td.col-length-piece').forEach(el => {
+            el.classList.toggle('col-hidden', !hasLengthPiece);
+        });
+        document.querySelectorAll('th.col-width, td.col-width').forEach(el => {
+            el.classList.toggle('col-hidden', !hasSheet);
+        });
+        document.querySelectorAll('th.col-length-sheet, td.col-length-sheet').forEach(el => {
+            el.classList.toggle('col-hidden', !hasSheet);
+        });
+    }
+
+    function onMetalChange(index, metalKey) {
+        const item = state.items[index];
+        item.metal_key = metalKey;
+
+        const metal = state.metalsDB?.[metalKey];
+        if (metal) {
+            item.metal_name = metal.name;
+            item.size = '';  // Сброс размера
+            item._config = getFieldsConfig(metalKey);
+
+            // Установить стандартную длину
+            if (STANDARD_LENGTHS[metalKey]) {
+                item.length_per_piece = STANDARD_LENGTHS[metalKey][0];
+            }
+        }
+
+        saveState();
+        renderTable();
+    }
+
+    function onSizeChange(index, value) {
+        if (value === '_custom') {
+            state.items[index].size = '';
+        } else {
+            state.items[index].size = value;
+        }
+        saveState();
+        renderTable();
+    }
+
+    function onFieldChange(index, field, value) {
+        const item = state.items[index];
+        item[field] = value;
+
+        const config = getFieldsConfig(item.metal_key);
+
+        // ✅ СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ИЗМЕНЕНИЯ РАЗМЕРОВ ШТУКИ/ЛИСТА
+        // При изменении length_per_piece (для линейных) или width/length_sheet (для листов)
+        // пересчитываем ОТ ИСХОДНОГО ВЕСА (original_weight)
+        // Это гарантирует воспроизводимость результатов
+        if (field === 'length_per_piece' ||
+            (config.isSheet && (field === 'width' || field === 'length_sheet'))) {
+            recalculateFromOriginalWeight(index);
+            saveState();
+            return;
+        }
+
+        // ✅ При изменении веса вручную - обновляем original_weight
+        if (field === 'weight') {
+            const newWeight = parseFloat(value);
+            if (newWeight > 0) {
+                item.original_weight = newWeight;
+                console.log(`📝 Обновлён исходный вес: ${newWeight} т`);
+            }
+        }
+
+        // Для остальных полей - полный пересчёт через calculateMetal
+        if (['weight', 'length', 'pieces', 'width', 'length_sheet'].includes(field)) {
+            recalculateRow(index, field);
+        }
+
+        saveState();
+    }
+
+    // ✅ ПЕРЕСЧЁТ ОТ ИСХОДНОГО ВЕСА
+    // Для ЛИНЕЙНЫХ типов (трубы, уголки, балки):
+    //   общая_длина = original_weight × 1000 / weight_per_meter
+    //   кол_во_штук = round(общая_длина / длина_штуки)
+    //   фактическая_длина = кол_во_штук × длина_штуки
+    //   фактический_вес = фактическая_длина × weight_per_meter / 1000
+    //
+    // Для ЛИСТОВ (площадных типов):
+    //   общая_площадь = original_weight × 1000 / weight_per_m2
+    //   площадь_листа = ширина × длина_листа
+    //   кол_во_листов = round(общая_площадь / площадь_листа)
+    //   фактическая_площадь = кол_во_листов × площадь_листа
+    //   фактический_вес = фактическая_площадь × weight_per_m2 / 1000
+    function recalculateFromOriginalWeight(index) {
+        const item = state.items[index];
+        if (!item.metal_key || !item.size) return;
+
+        const config = getFieldsConfig(item.metal_key);
+        const originalWeight = parseFloat(item.original_weight);
+
+        if (!originalWeight || originalWeight <= 0) {
+            console.log(`⚠️ Нет исходного веса для пересчёта`);
+            return;
+        }
+
+        // Получаем weight_per_meter/weight_per_m2 через calculateMetal
+        const parsedSize = parseSize(item.size, item.metal_key);
+        if (!parsedSize) return;
+
+        const params = {
+            metalType: item.metal_key,
+            size: parsedSize,
+            steelType: item.steel_grade || 'ст3',
+            pieces: 1,
+            lengthSheet: 1,
+            width: 1 // Для листов: 1м² (1м × 1м)
+        };
+
+        try {
+            const metalDatabase = { metals: state.metalsDB };
+            const result = window.calculateMetal(params, metalDatabase);
+
+            if (!result.success || !result.weightPerMeter) {
+                console.log(`⚠️ Не удалось получить вес на единицу:`, result.error);
+                return;
+            }
+
+            const weightPerUnit = result.weightPerMeter; // кг/м для линейных, кг/м² для листов
+
+            if (config.isSheet) {
+                // ✅ ЛИСТЫ: расчёт по площади
+                const sheetWidth = parseFloat(item.width) || 1.25;
+                const sheetLength = parseFloat(item.length_sheet) || 2.5;
+                const areaPerSheet = sheetWidth * sheetLength; // м²
+
+                // 1. Общая площадь из исходного веса
+                const totalArea = originalWeight * 1000 / weightPerUnit; // м²
+
+                // 2. Количество листов (округление)
+                const pieces = Math.round(totalArea / areaPerSheet);
+
+                // 3. Фактическая площадь (кратна листам)
+                const actualArea = pieces * areaPerSheet;
+
+                // 4. Фактический вес (кратен листам)
+                const actualWeight = actualArea * weightPerUnit / 1000; // тонны
+
+                console.log(`📐 Пересчёт ЛИСТА от исходного веса:`);
+                console.log(`   original_weight = ${originalWeight} т`);
+                console.log(`   weight_per_m² = ${weightPerUnit.toFixed(3)} кг/м²`);
+                console.log(`   total_area = ${originalWeight}×1000/${weightPerUnit.toFixed(3)} = ${totalArea.toFixed(2)} м²`);
+                console.log(`   sheet_size = ${sheetWidth}×${sheetLength} = ${areaPerSheet.toFixed(2)} м²`);
+                console.log(`   pieces = round(${totalArea.toFixed(2)}/${areaPerSheet.toFixed(2)}) = ${pieces} листов`);
+                console.log(`   actual_area = ${pieces}×${areaPerSheet.toFixed(2)} = ${actualArea.toFixed(2)} м²`);
+                console.log(`   actual_weight = ${actualArea.toFixed(2)}×${weightPerUnit.toFixed(3)}/1000 = ${actualWeight.toFixed(3)} т`);
+
+                // Обновляем значения (original_weight НЕ трогаем!)
+                item.weight = Math.round(actualWeight * 1000) / 1000;
+                item.length = Math.round(actualArea * 100) / 100; // Для листов length = площадь м²
+                item.pieces = pieces;
+
+            } else {
+                // ✅ ЛИНЕЙНЫЕ ТИПЫ: расчёт по длине
+                const lengthPerPiece = parseFloat(item.length_per_piece) || 6;
+
+                // 1. Общая длина из исходного веса
+                const totalLength = originalWeight * 1000 / weightPerUnit; // м
+
+                // 2. Количество штук (округление)
+                const pieces = Math.round(totalLength / lengthPerPiece);
+
+                // 3. Фактическая длина (кратна штукам)
+                const actualLength = pieces * lengthPerPiece;
+
+                // 4. Фактический вес (кратен штукам)
+                const actualWeight = actualLength * weightPerUnit / 1000; // тонны
+
+                console.log(`📐 Пересчёт от исходного веса:`);
+                console.log(`   original_weight = ${originalWeight} т`);
+                console.log(`   weight_per_meter = ${weightPerUnit.toFixed(3)} кг/м`);
+                console.log(`   total_length = ${originalWeight}×1000/${weightPerUnit.toFixed(3)} = ${totalLength.toFixed(2)} м`);
+                console.log(`   length_per_piece = ${lengthPerPiece} м`);
+                console.log(`   pieces = round(${totalLength.toFixed(2)}/${lengthPerPiece}) = ${pieces} шт`);
+                console.log(`   actual_length = ${pieces}×${lengthPerPiece} = ${actualLength} м`);
+                console.log(`   actual_weight = ${actualLength}×${weightPerUnit.toFixed(3)}/1000 = ${actualWeight.toFixed(3)} т`);
+
+                // Обновляем значения (original_weight НЕ трогаем!)
+                item.weight = Math.round(actualWeight * 1000) / 1000;
+                item.length = Math.round(actualLength * 100) / 100;
+                item.pieces = pieces;
+            }
+
+            renderTable();
+            updateTotals();
+
+        } catch (e) {
+            console.error('Ошибка пересчёта от исходного веса:', e);
+        }
+    }
+
+    // Пересчёт одной строки при изменении поля (используем calculateMetal)
+    function recalculateRow(index, changedField) {
+        const item = state.items[index];
+        if (!item.metal_key) return;
+
+        // Парсим размер
+        const parsedSize = parseSize(item.size, item.metal_key);
+        if (!parsedSize) return;
+
+        // Формируем параметры для calculateMetal
+        const params = {
+            metalType: item.metal_key,
+            size: parsedSize,
+            steelType: item.steel_grade || 'ст3'
+        };
+
+        // Определяем что использовать как источник (то что изменили)
+        const config = getFieldsConfig(item.metal_key);
+
+        if (changedField === 'weight' && item.weight && parseFloat(item.weight) > 0) {
+            params.weight = parseFloat(item.weight);
+        } else if (changedField === 'length' && item.length && parseFloat(item.length) > 0) {
+            params.length = parseFloat(item.length);
+        } else if (changedField === 'pieces' && item.pieces && parseInt(item.pieces) > 0) {
+            params.pieces = parseInt(item.pieces);
+        } else if (changedField === 'width' || changedField === 'length_sheet') {
+            // ✅ Только для ЛИСТОВ: при изменении размеров листа - пересчитываем от того что есть
+            // (length_per_piece обрабатывается отдельно в onFieldChange!)
+            if (item.weight && parseFloat(item.weight) > 0) {
+                params.weight = parseFloat(item.weight);
+            } else if (item.pieces && parseInt(item.pieces) > 0) {
+                params.pieces = parseInt(item.pieces);
+            } else if (item.length && parseFloat(item.length) > 0) {
+                params.length = parseFloat(item.length);
+            } else {
+                return; // Нет данных для пересчёта
+            }
+        } else {
+            return; // Нечего пересчитывать
+        }
+
+        // ✅ Используем длину штуки:
+        // 1. Если пользователь задал length_per_piece - используем его значение
+        // 2. Иначе - стандартную длину (балки 12м, трубы 6м, арматура 11.7м)
+        const userLength = item.length_per_piece ? parseFloat(item.length_per_piece) : null;
+        const standardLength = STANDARD_LENGTHS[item.metal_key]?.[0];
+
+        if (userLength && userLength > 0) {
+            params.lengthSheet = userLength;
+            console.log(`📏 Используем ПОЛЬЗОВАТЕЛЬСКУЮ длину штуки: ${userLength}м`);
+        } else if (standardLength) {
+            params.lengthSheet = standardLength;
+            console.log(`📏 Используем СТАНДАРТНУЮ длину штуки: ${standardLength}м`);
+        }
+
+        // Для листов добавляем ширину и длину листа
+        if (config.isSheet) {
+            if (item.width) params.width = parseFloat(item.width);
+            if (item.length_sheet) params.lengthSheet = parseFloat(item.length_sheet);
+        }
+
+        console.log(`🔄 Пересчёт строки ${index + 1}, поле: ${changedField}`, params);
+
+        try {
+            const metalDatabase = { metals: state.metalsDB };
+            const result = window.calculateMetal(params, metalDatabase);
+
+            console.log(`📊 Результат:`, result);
+
+            if (result.success) {
+                // ✅ ВСЕГДА применяем результаты от calculateMetal
+                // Они уже включают округление до целых штук!
+                // Это значит: если ввели вес 20.467т, а округление даёт 21.264т — показываем 21.264т
+                if (result.weight !== null) {
+                    item.weight = result.weight;
+                }
+                if (result.length !== null) {
+                    item.length = result.length;
+                }
+                if (result.pieces !== null) {
+                    item.pieces = result.pieces;
+                }
+            }
+        } catch (e) {
+            console.error('Ошибка пересчёта:', e);
+        }
+
+        // Обновляем только эту строку
+        renderTable();
+        updateTotals();
+    }
+
+    // Обновить итоги без полного пересчёта
+    function updateTotals() {
+        let totalWeight = 0;
+        let totalLength = 0;
+        let calculated = 0;
+
+        for (const item of state.items) {
+            if (item.weight && parseFloat(item.weight) > 0) {
+                totalWeight += parseFloat(item.weight);
+                calculated++;
+            }
+            if (item.length && parseFloat(item.length) > 0) {
+                totalLength += parseFloat(item.length);
+            }
+        }
+
+        document.getElementById('total-weight').textContent = Math.round(totalWeight * 1000) / 1000;
+        document.getElementById('total-length').textContent = Math.round(totalLength * 100) / 100;
+        document.getElementById('total-items').textContent = state.items.length;
+        document.getElementById('calc-success').textContent = calculated;
+        document.getElementById('calc-total').textContent = state.items.length;
+        document.getElementById('results-section').classList.remove('hidden');
+    }
+
+    function addEmptyRow() {
+        state.items.push(normalizeItem({}, state.items.length));
+        saveState();
+        renderTable();
+    }
+
+    function removeRow(index) {
+        state.items.splice(index, 1);
+        state.items.forEach((item, i) => item.index = i + 1);
+        saveState();
+        renderTable();
+    }
+
+    // ============================================================
+    // РАСЧЁТ
+    // ============================================================
+    async function calculateOrder() {
+        if (state.items.length === 0) {
+            alert('Добавьте позиции для расчёта');
+            return;
+        }
+
+        showSpinner('calc-spinner', true);
+
+        try {
+            // ✅ ВСЕГДА используем локальный расчёт через calculateMetal
+            // API используется только для парсинга текста/файлов
+            const results = calculateLocal(state.items);
+
+            // Обновляем state.items с результатами от calculateMetal (УЖЕ с округлением!)
+            if (results.items) {
+                results.items.forEach((r, i) => {
+                    if (state.items[i]) {
+                        console.log(`🔄 ПРИМЕНЯЕМ РЕЗУЛЬТАТЫ для позиции ${i + 1}:`, {
+                            before: { weight: state.items[i].weight, length: state.items[i].length, pieces: state.items[i].pieces },
+                            fromCalcMetal: { weight: r.weight, length: r.length, pieces: r.pieces },
+                            error: r.error
+                        });
+
+                        // ✅ ВСЕГДА применяем результаты calculateMetal (они уже с округлением)
+                        // ⚠️ original_weight НЕ трогаем - это исходные данные из заявки!
+                        if (r.weight !== undefined && r.weight !== null) {
+                            state.items[i].weight = r.weight;
+                        }
+                        if (r.length !== undefined && r.length !== null) {
+                            state.items[i].length = r.length;
+                        }
+                        if (r.pieces !== undefined && r.pieces !== null) {
+                            state.items[i].pieces = r.pieces;
+                        }
+
+                        console.log(`   after: { weight: ${state.items[i].weight}, length: ${state.items[i].length}, pieces: ${state.items[i].pieces} }`);
+                    }
+                });
+            }
+
+            state.calcResults = results;
+            saveState();
+            renderTable();
+            renderResults(results);
+
+        } catch (e) {
+            alert('Ошибка расчёта: ' + e.message);
+        } finally {
+            showSpinner('calc-spinner', false);
+        }
+    }
+
+    // ============================================================
+    // РАСЧЁТ ВЕСА НА МЕТР (теперь используем calculateMetal из calculator.browser.js)
+    // ============================================================
+    // Функция getWeightPerMeter удалена - используем calculateMetal напрямую
+
+    function calculateLocal(items) {
+        const results = [];
+        let totalWeight = 0;
+        let totalLength = 0;
+        let successCount = 0;
+
+        console.log('🧮 Начинаем расчёт для', items.length, 'позиций (используем calculateMetal)');
+
+        // Создаём объект базы данных в формате который ожидает calculateMetal
+        const metalDatabase = { metals: state.metalsDB };
+
+        for (const item of items) {
+            const result = { index: item.index, error: null };
+
+            console.log(`📍 Позиция ${item.index}:`, {
+                metal_key: item.metal_key,
+                size: item.size,
+                weight: item.weight,
+                length: item.length,
+                pieces: item.pieces
+            });
+
+            if (!item.metal_key) {
+                result.error = 'Тип металла не выбран';
+                console.log(`  ❌ ${result.error}`);
+                results.push(result);
+                continue;
+            }
+
+            // Парсим размер в правильный формат
+            const parsedSize = parseSize(item.size, item.metal_key);
+
+            // 🔍 СПЕЦИАЛЬНАЯ ОТЛАДКА ДЛЯ БАЛОК
+            if (item.metal_key === 'beam') {
+                const metalInfo = state.metalsDB['beam'];
+                console.log('🔷 БАЛКА ДЕТАЛИ:', {
+                    inputSize: item.size,
+                    parsedSize: parsedSize,
+                    parsedSizeType: typeof parsedSize,
+                    formula: metalInfo?.formula,
+                    weightsKeys: metalInfo?.weights ? Object.keys(metalInfo.weights).slice(0, 10) : 'нет weights',
+                    weightForSize: metalInfo?.weights?.[parsedSize],
+                    weightForSizeStr: metalInfo?.weights?.[String(parsedSize)]
+                });
+            }
+
+            // Формируем параметры для calculateMetal
+            const params = {
+                metalType: item.metal_key,
+                size: parsedSize,
+                steelType: item.steel_grade || 'ст3'
+            };
+
+            // ✅ Определяем входной параметр на основе UNIT из парсера
+            // Это главный индикатор что именно указал клиент в заявке
+            const unit = (item.unit || '').toLowerCase();
+            const qty = parseFloat(item.quantity) || 0;
+            let inputSource = 'unknown';
+
+            console.log(`  📋 unit="${unit}", quantity=${qty}, weight=${item.weight}, length=${item.length}, pieces=${item.pieces}`);
+
+            if (unit.includes('т') || unit === 'тн') {
+                // Клиент указал ТОННЫ
+                const weightVal = qty || parseFloat(item.weight) || 0;
+                if (weightVal > 0) {
+                    params.weight = weightVal;
+                    inputSource = `тонны (${weightVal}т)`;
+                }
+            } else if (unit.includes('м²') || unit.includes('м.кв') || unit.includes('кв')) {
+                // Клиент указал ПЛОЩАДЬ (для листов)
+                const areaVal = qty || parseFloat(item.length) || 0;
+                if (areaVal > 0) {
+                    params.length = areaVal; // для листов length = площадь
+                    inputSource = `площадь (${areaVal}м²)`;
+                }
+            } else if (unit.includes('м') && !unit.includes('²')) {
+                // Клиент указал МЕТРЫ
+                const lengthVal = qty || parseFloat(item.length) || 0;
+                if (lengthVal > 0) {
+                    params.length = lengthVal;
+                    inputSource = `метры (${lengthVal}м)`;
+                }
+            } else if (unit.includes('шт')) {
+                // Клиент указал ШТУКИ
+                const piecesVal = Math.round(qty) || parseInt(item.pieces) || 0;
+                if (piecesVal > 0) {
+                    params.pieces = piecesVal;
+                    inputSource = `штуки (${piecesVal}шт)`;
+                }
+            }
+
+            // Fallback: если unit непонятный или параметр не добавлен
+            if (!params.weight && !params.length && !params.pieces) {
+                // Смотрим что есть в данных
+                if (item.weight && parseFloat(item.weight) > 0) {
+                    params.weight = parseFloat(item.weight);
+                    inputSource = `fallback: вес (${item.weight}т)`;
+                } else if (item.length && parseFloat(item.length) > 0) {
+                    params.length = parseFloat(item.length);
+                    inputSource = `fallback: длина (${item.length}м)`;
+                } else if (item.pieces && parseInt(item.pieces) > 0) {
+                    params.pieces = parseInt(item.pieces);
+                    inputSource = `fallback: штуки (${item.pieces}шт)`;
+                } else if (qty > 0) {
+                    params.pieces = Math.round(qty);
+                    inputSource = `fallback: quantity как штуки (${qty})`;
+                } else {
+                    result.error = 'Нет данных для расчёта (вес, длина или штуки)';
+                    console.log(`  ❌ ${result.error}`);
+                    results.push(result);
+                    continue;
+                }
+            }
+
+            console.log(`  🎯 Входной параметр: ${inputSource}`);
+
+            // ✅ Используем длину штуки:
+            // 1. Если пользователь задал length_per_piece - используем его значение
+            // 2. Иначе - стандартную длину (балки 12м, трубы 6м, арматура 11.7м)
+            const userLength = item.length_per_piece ? parseFloat(item.length_per_piece) : null;
+            const standardLength = STANDARD_LENGTHS[item.metal_key]?.[0];
+
+            if (userLength && userLength > 0) {
+                params.lengthSheet = userLength;
+                console.log(`  📏 Используем ПОЛЬЗОВАТЕЛЬСКУЮ длину штуки: ${userLength}м`);
+            } else if (standardLength) {
+                params.lengthSheet = standardLength;
+                console.log(`  📏 Используем СТАНДАРТНУЮ длину штуки: ${standardLength}м`);
+            }
+
+            // Для листов добавляем ширину и длину листа
+            const config = getFieldsConfig(item.metal_key);
+            if (config.isSheet) {
+                if (item.width) params.width = parseFloat(item.width);
+                if (item.length_sheet) params.lengthSheet = parseFloat(item.length_sheet);
+            }
+
+            console.log(`  📦 Параметры для calculateMetal:`, params);
+
+            // 🔍 ОТЛАДКА для балок и листов
+            const metalInfo = state.metalsDB[item.metal_key];
+            if (metalInfo) {
+                console.log(`  🔍 DEBUG: formula="${metalInfo.formula}"`);
+                console.log(`  🔍 DEBUG: params.size=${params.size} (type: ${typeof params.size})`);
+                console.log(`  🔍 DEBUG: weights["${params.size}"] =`, metalInfo.weights?.[String(params.size)]);
+                console.log(`  🔍 DEBUG: steelCoefficients["${params.steelType}"] =`, metalInfo.steelCoefficients?.[params.steelType]);
+                console.log(`  🔍 DEBUG: has weights:`, !!metalInfo.weights, ', has steelCoefs:', !!(metalInfo.steelDensities || metalInfo.steelCoefficients));
+            }
+
+            try {
+                // ✅ ИСПОЛЬЗУЕМ ФУНКЦИЮ ИЗ calculator.browser.js
+                const calcResult = window.calculateMetal(params, metalDatabase);
+
+                console.log(`  📊 Результат calculateMetal:`, calcResult);
+
+                if (!calcResult.success) {
+                    console.log(`  ❌ CALC FAIL:`, {
+                        row: item.index,
+                        metalKey: item.metal_key,
+                        formula: metalInfo?.formula,
+                        size: params.size,
+                        sizeType: typeof params.size,
+                        error: calcResult.error
+                    });
+                }
+
+                if (calcResult.success) {
+                    result.weight = calcResult.weight;
+                    result.length = calcResult.length;
+                    result.pieces = calcResult.pieces;
+                    result.weightPerMeter = calcResult.weightPerMeter;
+
+                    if (result.weight && result.weight > 0) {
+                        totalWeight += result.weight;
+                        successCount++;
+                    }
+                    if (result.length && result.length > 0) {
+                        totalLength += result.length;
+                    }
+
+                    console.log(`  ✅ Успех: вес=${result.weight}т, длина=${result.length}м, шт=${result.pieces}`);
+                } else {
+                    result.error = calcResult.error;
+                    console.log(`  ❌ Ошибка calculateMetal: ${result.error}`);
+                }
+            } catch (e) {
+                result.error = e.message;
+                console.log(`  ❌ Исключение: ${e.message}`);
+            }
+
+            results.push(result);
+        }
+
+        console.log(`🏁 Итого: ${successCount}/${items.length} рассчитано, вес=${totalWeight}т, длина=${totalLength}м`);
+
+        return {
+            success: true,
+            items: results,
+            totals: {
+                weight: Math.round(totalWeight * 1000) / 1000,
+                length: Math.round(totalLength * 100) / 100,
+                items_total: items.length,
+                items_calculated: successCount
+            }
+        };
+    }
+
+    // Парсинг размера в формат для calculateMetal
+    function parseSize(size, metalKey) {
+        if (!size) return null;
+
+        const metal = state.metalsDB?.[metalKey];
+        if (!metal) return size;
+
+        const sizeStr = String(size).replace(',', '.');
+
+        // ✅ БАЛКИ, ШВЕЛЛЕРЫ, РЕЛЬСЫ - размеры это буквенно-цифровые строки ("40Ш1", "20Б1", "Р65")
+        // Для них НЕ нужно парсить в число - передаём как есть
+        // ВАЖНО: убираем ВСЕ пробелы и нормализуем регистр: "40 ш 1" -> "40Ш1"
+        const stringFormulasUpperCase = ['beam', 'channel', 'shveller_simple', 'shveller_galv_simple', 'rels_linear'];
+        if (stringFormulasUpperCase.includes(metal.formula)) {
+            // Убираем пробелы и приводим к верхнему регистру
+            const normalizedSize = sizeStr.replace(/\s/g, '').toUpperCase();
+            console.log(`📋 Балка/швеллер/рельс: размер "${sizeStr}" -> "${normalizedSize}"`);
+            return normalizedSize;
+        }
+
+        // ✅ ПРОФИЛЬНЫЕ ТРУБЫ И УГОЛКИ - размеры как строки "180х180х6" (в нижнем регистре х)
+        const stringFormulasAsIs = [
+            'tryba_kvadr_linear', 'tryba_pr_linear', 'tryba_pr_galv_linear', 'tryba_es_linear', 'tryba_es_galv_linear',
+            'ygolok_linear', 'ygolok_galv_linear', 'ygolok_gnyt_linear', 'ygolok_gnyt_galv_linear'
+        ];
+        if (stringFormulasAsIs.includes(metal.formula)) {
+            // Нормализуем разделитель к русской х (так в базе)
+            let normalizedSize = sizeStr.replace(/[xX×]/g, 'х');
+
+            // ✅ НОРМАЛИЗАЦИЯ СОКРАЩЁННЫХ РАЗМЕРОВ КВАДРАТНЫХ ТРУБ И УГОЛКОВ
+            // "140х7" → "140х140х7" (сокращённый формат для квадратных труб)
+            // "125х8" → "125х125х8" (сокращённый формат для равнополочных уголков)
+            // Логика: если только 2 числа и второе ≤ толщины — это сокращённый формат
+            const isSquarePipe = metalKey?.includes('kvadr') || metal.formula?.includes('kvadr');
+            const isAngle = metal.formula?.includes('ygolok');
+
+            if (isSquarePipe || isAngle) {
+                const twoPartMatch = normalizedSize.match(/^(\d+(?:[.,]\d+)?)х(\d+(?:[.,]\d+)?)$/);
+                if (twoPartMatch) {
+                    const first = parseFloat(twoPartMatch[1].replace(',', '.'));
+                    const second = parseFloat(twoPartMatch[2].replace(',', '.'));
+                    // Для труб толщина ≤ 12мм, для уголков ≤ 35мм
+                    const maxThickness = isAngle ? 35 : 12;
+                    if (second <= maxThickness && second < first) {
+                        normalizedSize = `${twoPartMatch[1]}х${twoPartMatch[1]}х${twoPartMatch[2]}`;
+                        const typeLabel = isAngle ? 'Уголок' : 'Квадратная труба';
+                        console.log(`📐 ${typeLabel}: сокращённый формат "${sizeStr}" -> "${normalizedSize}"`);
+                    }
+                }
+            }
+
+            const typeLabel = metal.formula.includes('ygolok') ? 'Уголок' : 'Профильная труба';
+            console.log(`📋 ${typeLabel}: размер "${sizeStr}" -> "${normalizedSize}"`);
+            return normalizedSize;
+        }
+
+        // ✅ ТРУБЫ (старые формулы) - размеры это массивы чисел [60, 40, 3]
+        // ВАЖНО: sheet и strip НЕ здесь - для них размер это просто толщина (число)
+        const arrayFormulas = ['pipe', 'pipe_pnd', 'pipe_square', 'pipe_oval', 'pipe_rect', 'angle'];
+        if (arrayFormulas.includes(metal.formula)) {
+            // Разбиваем размер на части: "60х40х3" -> [60, 40, 3]
+            const parts = sizeStr.split(/[хx×]/).map(p => parseFloat(p)).filter(p => !isNaN(p));
+            if (parts.length > 1) {
+                return parts;
+            }
+        }
+
+        // ✅ ЛИСТЫ - размер это толщина (просто число)
+        if (metal.formula === 'sheet') {
+            const num = parseFloat(sizeStr);
+            console.log(`📋 Лист: размер "${sizeStr}" -> ${num} (толщина)`);
+            return isNaN(num) ? sizeStr : num;
+        }
+
+        // ✅ КРЕПЁЖ (metiz) - размеры как строки "6х30", "М8" и т.д.
+        if (metal.formula === 'metiz') {
+            // Нормализуем разделитель к русской х (так в базе)
+            const normalizedSize = sizeStr.replace(/[xX×]/g, 'х');
+            console.log(`🔩 Крепёж: размер "${sizeStr}" -> "${normalizedSize}"`);
+            return normalizedSize;
+        }
+
+        // ✅ ОСТАЛЬНЫЕ (арматура, круг и т.д.) - проверяем, есть ли буквы
+        // Если есть буквы (кроме x/х) - передаём как строку
+        if (/[а-яА-Яa-zA-Z]/.test(sizeStr.replace(/[xхX×]/g, ''))) {
+            console.log(`📋 Размер "${sizeStr}" содержит буквы - передаётся как строка`);
+            return sizeStr;
+        }
+
+        // Для остальных - возвращаем как число
+        const num = parseFloat(sizeStr);
+        return isNaN(num) ? sizeStr : num;
+    }
+
+    function renderResults(results) {
+        if (!results || !results.totals) return;
+
+        document.getElementById('total-weight').textContent = results.totals.weight;
+        document.getElementById('total-length').textContent = results.totals.length;
+        document.getElementById('total-items').textContent = results.totals.items_total;
+        document.getElementById('calc-success').textContent = results.totals.items_calculated;
+        document.getElementById('calc-total').textContent = results.totals.items_total;
+
+        document.getElementById('results-section').classList.remove('hidden');
+    }
+
+    // ============================================================
+    // УТИЛИТЫ
+    // ============================================================
+    function showSpinner(id, show) {
+        document.getElementById(id).classList.toggle('hidden', !show);
+    }
+
+    function showParseSuccess(count) {
+        document.getElementById('parse-status').classList.remove('hidden');
+        document.getElementById('parse-success').classList.remove('hidden');
+        document.getElementById('parse-error').classList.add('hidden');
+        document.getElementById('parsed-count').textContent = count;
+    }
+
+    function showParseError(message) {
+        document.getElementById('parse-status').classList.remove('hidden');
+        document.getElementById('parse-success').classList.add('hidden');
+        document.getElementById('parse-error').classList.remove('hidden');
+        document.getElementById('error-message').textContent = message;
+    }
+
+    function saveState() {
+        localStorage.setItem('metalCalcState', JSON.stringify({
+            items: state.items,
+            calcResults: state.calcResults
+        }));
+    }
+
+    function restoreState() {
+        try {
+            const saved = localStorage.getItem('metalCalcState');
+            if (saved) {
+                const data = JSON.parse(saved);
+                if (data.items?.length > 0) {
+                    state.items = data.items.map((item, i) => {
+                        item._config = getFieldsConfig(item.metal_key);
+                        return item;
+                    });
+                    state.calcResults = data.calcResults;
+                    renderTable();
+                    if (state.calcResults) renderResults(state.calcResults);
+                }
+            }
+        } catch (e) {}
+    }
+
+    function clearAll() {
+        if (!confirm('Очистить все позиции?')) return;
+        state.items = [];
+        state.calcResults = null;
+        document.getElementById('order-text').value = '';
+        document.getElementById('positions-section').classList.add('hidden');
+        document.getElementById('results-section').classList.add('hidden');
+        document.getElementById('supplier-request-result').style.display = 'none';
+        document.getElementById('parse-status').classList.add('hidden');
+        localStorage.removeItem('metalCalcState');
+
+        // Сбрасываем данные Excel
+        window.currentExcelBase64 = null;
+        window.currentExcelFilename = null;
+        window.currentSupplierRequest = null;
+    }
+
+    // ============================================================
+    // ФУНКЦИИ ЗАПРОСА ПОСТАВЩИКАМ
+    // ============================================================
+
+    // Генерация уникального ID запроса
+    function generateRequestId() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const dateStr = `${year}${month}${day}`;
+
+        // Получаем счётчик из localStorage для текущей даты
+        const counterKey = `supplier_request_counter_${dateStr}`;
+        let counter = parseInt(localStorage.getItem(counterKey) || '0') + 1;
+        localStorage.setItem(counterKey, counter.toString());
+
+        // Формат: ЗП-ГГГГММДД-XXX
+        const counterStr = String(counter).padStart(3, '0');
+        return `ЗП-${dateStr}-${counterStr}`;
+    }
+
+    // Показать компактную карточку результата запроса
+    function showSupplierResult(requestId, itemsCount, totalWeight) {
+        // Убеждаемся что вес - число
+        const weight = parseFloat(totalWeight) || 0;
+
+        document.getElementById('result-request-id').textContent = requestId;
+        document.getElementById('result-summary').textContent =
+            `${itemsCount} ${getPositionWord(itemsCount)} • ${weight.toFixed(3)} т`;
+
+        // Сбрасываем статусы кнопок отправки
+        document.querySelectorAll('.btn-supplier').forEach(btn => {
+            btn.disabled = false;
+            btn.classList.remove('btn-sent');
+        });
+        document.getElementById('btn-send-nn').innerHTML = '📍 Нижний Новгород';
+        document.getElementById('btn-send-moscow').innerHTML = '🏙️ Москва и регионы';
+        document.getElementById('btn-send-factories').innerHTML = '🏭 Заводы';
+
+        // Всегда показываем "Сформировано"
+        const statusEl = document.getElementById('result-status');
+        statusEl.textContent = '✅ Сформировано';
+        statusEl.style.background = '#d4edda';
+        statusEl.style.color = '#155724';
+
+        // Кнопка Excel - скрываем секцию если файла нет
+        const excelSection = document.querySelector('.excel-download-section');
+        if (window.currentExcelBase64) {
+            excelSection.style.display = 'block';
+        } else {
+            excelSection.style.display = 'none';
+        }
+
+        // Показываем карточку
+        document.getElementById('supplier-request-result').style.display = 'block';
+
+        console.log(`📋 Показан результат: ${requestId}, ${itemsCount} поз., ${weight.toFixed(3)} т`);
+    }
+
+    // Склонение слова "позиция"
+    function getPositionWord(count) {
+        const lastTwo = count % 100;
+        const lastOne = count % 10;
+
+        if (lastTwo >= 11 && lastTwo <= 19) return 'позиций';
+        if (lastOne === 1) return 'позиция';
+        if (lastOne >= 2 && lastOne <= 4) return 'позиции';
+        return 'позиций';
+    }
+
+    // Функция скачивания Excel
+    function downloadExcel() {
+        console.log('📥 downloadExcel вызван');
+        console.log('📄 currentExcelBase64:', window.currentExcelBase64 ? 'существует (' + window.currentExcelBase64.length + ' символов)' : 'NULL');
+        console.log('📄 currentExcelFilename:', window.currentExcelFilename || 'не задан');
+
+        if (!window.currentExcelBase64) {
+            alert('Excel файл не найден.\n\nВозможные причины:\n- Webhook не вернул файл\n- Произошла ошибка при формировании\n\nПопробуйте сформировать запрос заново.');
+            return;
+        }
+
+        try {
+            // Конвертируем base64 в blob
+            const byteCharacters = atob(window.currentExcelBase64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            });
+
+            // Создаём ссылку и скачиваем
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = window.currentExcelFilename || 'Запрос_поставщикам.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            console.log('✅ Excel скачан успешно:', a.download);
+        } catch (error) {
+            console.error('❌ Ошибка при скачивании Excel:', error);
+            alert('Ошибка при скачивании: ' + error.message);
+        }
+    }
+
+    // Отправка запроса поставщикам
+    async function submitSupplierRequest() {
+        const btn = document.getElementById('btn-supplier-request');
+        const spinner = document.getElementById('supplier-spinner');
+
+        // Проверяем наличие позиций
+        if (!state.items || state.items.length === 0) {
+            alert('Нет позиций для отправки. Сначала загрузите заказ.');
+            return;
+        }
+
+        // Сначала рассчитываем все позиции
+        console.log('📊 Расчёт позиций перед отправкой...');
+        const results = calculateLocal(state.items);
+
+        // Обновляем state.items с результатами
+        if (results.items && Array.isArray(results.items)) {
+            results.items.forEach((calcItem, i) => {
+                if (i < state.items.length) {
+                    state.items[i] = { ...state.items[i], ...calcItem };
+                }
+            });
+        }
+
+        // Показываем спиннер
+        btn.disabled = true;
+        spinner.classList.remove('hidden');
+
+        try {
+            // Генерируем ID запроса
+            const requestId = generateRequestId();
+            console.log('📤 Формируем запрос поставщикам:', requestId);
+
+            // Формируем данные для отправки
+            const requestData = {
+                request_id: requestId,
+                timestamp: new Date().toISOString(),
+                items: state.items.map((item, index) => {
+                    // Получаем данные из базы металлов
+                    const metalDB = state.metalsDB?.[item.metal_key] || {};
+
+                    return {
+                        // Номер позиции
+                        position: index + 1,
+
+                        // Тип металла
+                        metal_key: item.metal_key || '',
+                        metal_type: metalDB.name || item.metal_name || item.metal_key || '',
+                        metal_name: item.metal_name || metalDB.name || '',
+
+                        // Размеры
+                        size: item.size || '',
+
+                        // Вес и количество
+                        weight: parseFloat(item.weight) || 0,
+                        total_length: parseFloat(item.total_length) || parseFloat(item.length) || 0,
+                        pieces: parseInt(item.pieces) || 0,
+                        length_per_piece: parseFloat(item.length_per_piece) || 0,
+
+                        // Для листов - ширина и длина листа
+                        width: parseFloat(item.width) || null,
+                        length_sheet: parseFloat(item.length_sheet) || null,
+
+                        // Стандарты и марка стали
+                        gost: metalDB.gost || metalDB.standard || '',
+                        steel_grade: item.steel_grade || item.steel_type || 'ст3',
+
+                        // Единица измерения
+                        unit: item.unit || 'шт',
+
+                        // Исходный текст позиции
+                        raw_text: item.raw_text || ''
+                    };
+                }),
+                totals: {
+                    weight: results.totals?.total_weight || 0,
+                    length: results.totals?.total_length || 0,
+                    items_count: state.items.length
+                }
+            };
+
+            // ✅ Считаем общий вес ЛОКАЛЬНО из items (до отправки)
+            const totalWeight = requestData.items.reduce((sum, item) => sum + (parseFloat(item.weight) || 0), 0);
+            const itemsCount = requestData.items.length;
+
+            // Обновляем totals с локально посчитанным весом
+            requestData.totals.weight = totalWeight;
+            requestData.totals.items_count = itemsCount;
+
+            console.log('📦 Данные запроса:', requestData);
+            console.log(`📊 Локальный расчёт: ${itemsCount} позиций, ${totalWeight.toFixed(3)} т`);
+
+            // URL вебхука n8n
+            const webhookUrl = 'https://primary-production-4e88.up.railway.app/webhook/supplier-request';
+
+            // Отправляем запрос
+            let webhookSuccess = false;
+            try {
+                const response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('✅ Ответ от webhook:', result);
+
+                    // Сохраняем данные Excel если есть
+                    if (result.excel_base64) {
+                        window.currentExcelBase64 = result.excel_base64;
+                        window.currentExcelFilename = result.excel_filename || `Запрос_${requestId}.xlsx`;
+                        console.log('💾 Excel сохранён:', window.currentExcelFilename, '(' + result.excel_base64.length + ' chars)');
+                    } else {
+                        console.warn('⚠️ Excel base64 не получен от webhook');
+                        window.currentExcelBase64 = null;
+                        window.currentExcelFilename = null;
+                    }
+
+                    webhookSuccess = true;
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (fetchError) {
+                // Если вебхук недоступен, показываем локальный результат
+                console.warn('⚠️ Вебхук недоступен:', fetchError.message);
+                window.currentExcelBase64 = null;
+                window.currentExcelFilename = null;
+            }
+
+            // ✅ Сохраняем данные для отправки поставщикам
+            window.currentSupplierRequest = {
+                request_id: requestId,
+                items: requestData.items,
+                totals: requestData.totals
+            };
+            console.log('💾 Данные сохранены для отправки поставщикам');
+
+            // Показываем компактную карточку результата (с ЛОКАЛЬНЫМ весом)
+            showSupplierResult(requestId, itemsCount, totalWeight);
+
+            // Также показываем результаты расчёта
+            document.getElementById('results-section').classList.remove('hidden');
+            updateTotals(results);
+
+        } catch (error) {
+            console.error('❌ Ошибка при формировании запроса:', error);
+            alert('Ошибка при формировании запроса: ' + error.message);
+        } finally {
+            // Скрываем спиннер
+            btn.disabled = false;
+            spinner.classList.add('hidden');
+        }
+    }
+
+    // ============================================================
+    // ОТПРАВКА ЗАПРОСА ПОСТАВЩИКАМ ПО КАТЕГОРИЯМ
+    // ============================================================
+
+    async function sendToSuppliers(category) {
+        const categoryNames = {
+            'nn': 'Нижний Новгород',
+            'moscow': 'Москва и регионы',
+            'factories': 'Заводы'
+        };
+
+        const categoryName = categoryNames[category];
+
+        // Проверяем наличие данных
+        if (!window.currentSupplierRequest) {
+            alert('Сначала сформируйте запрос поставщикам');
+            return;
+        }
+
+        // Подтверждение
+        if (!confirm(`Отправить запрос поставщикам категории "${categoryName}"?`)) {
+            return;
+        }
+
+        const btn = document.getElementById(`btn-send-${category}`);
+        const allButtons = document.querySelectorAll('.btn-supplier');
+
+        // Блокируем все кнопки
+        allButtons.forEach(b => b.disabled = true);
+
+        // Показываем спиннер на текущей кнопке
+        const originalContent = btn.innerHTML;
+        btn.innerHTML = `<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span> Отправка...`;
+
+        const payload = {
+            category: category,
+            category_name: categoryName,
+            request_id: window.currentSupplierRequest.request_id,
+            items: window.currentSupplierRequest.items,
+            totals: window.currentSupplierRequest.totals,
+            timestamp: new Date().toISOString(),
+            excel_base64: window.currentExcelBase64 || null,
+            excel_filename: window.currentExcelFilename || null
+        };
+
+        console.log(`📤 Отправка запроса поставщикам (${categoryName}):`, payload);
+
+        try {
+            const response = await fetch('https://primary-production-4e88.up.railway.app/webhook/send-supplier-request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('✅ Ответ от сервера:', result);
+
+                // Отмечаем кнопку как отправленную
+                btn.innerHTML = `✅ ${categoryName}`;
+                btn.classList.add('btn-sent');
+                btn.disabled = true; // Оставляем заблокированной
+
+                // Разблокируем остальные кнопки
+                allButtons.forEach(b => {
+                    if (b.id !== `btn-send-${category}` && !b.classList.contains('btn-sent')) {
+                        b.disabled = false;
+                    }
+                });
+
+                // Показываем панель отслеживания сводки
+                showSummaryTrackingPanel(result);
+
+                // Показываем результат
+                const suppliersInfo = result.suppliers_count ? `\nПоставщиков: ${result.suppliers_count}` : '';
+                const moscowTime = result.collect_at ? formatMoscowTime(result.collect_at) : '';
+                const collectInfo = moscowTime ? `\nСводка будет готова в ${moscowTime} (мск)` : '';
+                alert(`✅ Запрос отправлен!\n\nКатегория: ${categoryName}${suppliersInfo}${collectInfo}`);
+
+            } else {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+        } catch (error) {
+            console.error('❌ Ошибка отправки:', error);
+
+            // Восстанавливаем кнопку
+            btn.innerHTML = originalContent;
+
+            // Разблокируем все кнопки
+            allButtons.forEach(b => {
+                if (!b.classList.contains('btn-sent')) {
+                    b.disabled = false;
+                }
+            });
+
+            alert(`❌ Ошибка при отправке запроса: ${error.message}`);
+        }
+    }
+
+    // ============================================================
+    // ОТСЛЕЖИВАНИЕ СВОДКИ ОТ ПОСТАВЩИКОВ (СПИСОК АКТИВНЫХ ЗАКАЗОВ)
+    // ============================================================
+    // (Переменные объявлены в начале скрипта для правильного hoisting)
+
+    // Звуковое оповещение (Web Audio API)
+    function playNotificationSound() {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.value = 800; // Частота звука
+            oscillator.type = 'sine';
+
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.5);
+
+            console.log('🔔 Звуковое оповещение воспроизведено');
+        } catch (e) {
+            console.error('Ошибка воспроизведения звука:', e);
+        }
+    }
+
+    // Загрузить активные запросы из localStorage
+    function loadActiveRequests() {
+        try {
+            const saved = localStorage.getItem(ACTIVE_REQUESTS_KEY);
+            if (saved) {
+                activeRequests = JSON.parse(saved);
+                // Удаляем слишком старые (>7 дней)
+                const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+                const beforeCount = activeRequests.length;
+                activeRequests = activeRequests.filter(r => new Date(r.created_at).getTime() > sevenDaysAgo);
+                const removedCount = beforeCount - activeRequests.length;
+                if (removedCount > 0) {
+                    console.log(`🗑️ Удалено ${removedCount} старых заявок (>7 дней)`);
+                    saveActiveRequests();
+                }
+                console.log(`📂 Загружено ${activeRequests.length} заявок из localStorage`);
+            } else {
+                console.log('📂 localStorage пуст, заявок нет');
+            }
+        } catch (e) {
+            console.error('❌ Ошибка загрузки activeRequests:', e);
+            activeRequests = [];
+        }
+    }
+
+    // Сохранить активные запросы в localStorage
+    function saveActiveRequests() {
+        try {
+            localStorage.setItem(ACTIVE_REQUESTS_KEY, JSON.stringify(activeRequests));
+            console.log(`💾 Сохранено ${activeRequests.length} заявок в localStorage`);
+        } catch (e) {
+            console.error('❌ Ошибка сохранения activeRequests:', e);
+        }
+    }
+
+    // Добавить новый запрос в список
+    function addActiveRequest(result) {
+        const request = {
+            request_id: result.request_id,
+            category: result.category,
+            category_name: result.category_name || result.category,
+            collect_at: result.collect_at,
+            collect_at_formatted: result.collect_at_formatted,
+            suppliers_count: result.suppliers_count,
+            created_at: new Date().toISOString(),
+            status: 'pending'
+        };
+
+        // Добавляем в начало списка
+        activeRequests.unshift(request);
+        saveActiveRequests();
+
+        // Перерисовываем список
+        renderActiveRequests();
+
+        console.log('📊 Добавлен запрос:', request.request_id);
+    }
+
+    // Удалить запрос из списка
+    function removeActiveRequest(requestId) {
+        console.log(`🗑️ Удаляю заявку: ${requestId}`);
+
+        // Останавливаем таймер если есть
+        if (requestTimers[requestId]) {
+            clearInterval(requestTimers[requestId]);
+            delete requestTimers[requestId];
+        }
+        // Удаляем данные сводки
+        delete requestSummaryData[requestId];
+        // Удаляем из списка оповещённых
+        notifiedRequests.delete(requestId);
+
+        // Удаляем из массива
+        activeRequests = activeRequests.filter(r => r.request_id !== requestId);
+        saveActiveRequests();
+
+        // Перерисовываем
+        renderActiveRequests();
+    }
+
+    // Показать/скрыть дополнительные запросы
+    let showAllRequests = false;
+    function toggleMoreRequests() {
+        showAllRequests = !showAllRequests;
+        renderActiveRequests();
+    }
+
+    // Отрисовать список активных запросов
+    function renderActiveRequests() {
+        const container = document.getElementById('active-requests-container');
+        const list = document.getElementById('active-requests-list');
+        const showMoreBtn = document.getElementById('btn-show-more-requests');
+        const hiddenCount = document.getElementById('hidden-requests-count');
+
+        if (!container || !list) {
+            console.error('❌ Контейнер active-requests-container не найден!');
+            return;
+        }
+
+        if (activeRequests.length === 0) {
+            container.style.display = 'none';
+            console.log('🎨 Нет активных заявок для отображения');
+            return;
+        }
+
+        container.style.display = 'block';
+        console.log(`🎨 Отрисовано ${activeRequests.length} карточек заявок`);
+
+        // Определяем какие показать
+        const visibleRequests = showAllRequests ? activeRequests : activeRequests.slice(0, MAX_VISIBLE_REQUESTS);
+        const hiddenNum = activeRequests.length - MAX_VISIBLE_REQUESTS;
+
+        // Показываем/скрываем кнопку "Показать ещё"
+        if (hiddenNum > 0 && !showAllRequests) {
+            showMoreBtn.style.display = 'block';
+            hiddenCount.textContent = hiddenNum;
+            showMoreBtn.textContent = `Показать ещё (${hiddenNum})`;
+        } else if (showAllRequests && activeRequests.length > MAX_VISIBLE_REQUESTS) {
+            showMoreBtn.style.display = 'block';
+            showMoreBtn.textContent = 'Скрыть';
+        } else {
+            showMoreBtn.style.display = 'none';
+        }
+
+        // Генерируем HTML для каждой плашки
+        list.innerHTML = visibleRequests.map(req => {
+            const isReady = req.status === 'ready';
+            const isDownloaded = req.status === 'downloaded';
+            const hasData = !!requestSummaryData[req.request_id];
+
+            // Определяем класс и текст для бейджа
+            let badgeClass = 'pending';
+            let badgeText = '⏳ Сбор';
+            if (isDownloaded) {
+                badgeClass = 'downloaded';
+                badgeText = '✅ Скачано';
+            } else if (isReady) {
+                badgeClass = 'ready';
+                badgeText = '✅ Готово';
+            }
+
+            // Определяем текст кнопки скачивания
+            let downloadBtnText = '📥 Скачать Excel';
+            let downloadBtnClass = 'btn-download-request';
+            if (isDownloaded) {
+                downloadBtnText = '✅ Скачано';
+                downloadBtnClass = 'btn-download-request downloaded';
+            }
+
+            return `
+                <div id="request-card-${req.request_id}" class="request-card ${isReady || isDownloaded ? 'ready' : ''}">
+                    <button class="btn-close-card" onclick="removeActiveRequest('${req.request_id}')" title="Закрыть">✕</button>
+                    <div class="request-card-header">
+                        <div class="request-card-icon">📊</div>
+                        <div class="request-card-info">
+                            <h5>${req.request_id}</h5>
+                            <p id="status-${req.request_id}">✅ Отправлено: ${req.category_name}</p>
+                        </div>
+                        <div id="badge-${req.request_id}" class="request-card-badge ${badgeClass}">
+                            ${badgeText}
+                        </div>
+                    </div>
+                    <div id="timer-${req.request_id}" class="request-card-timer" style="font-size: 12px; color: #1e7e34; margin-bottom: 8px;"></div>
+                    <div class="request-card-actions">
+                        <button id="btn-check-${req.request_id}" class="btn-check-request" onclick="checkRequestStatus('${req.request_id}')">
+                            🔄 Проверить
+                        </button>
+                        <button id="btn-download-${req.request_id}" class="${downloadBtnClass}" onclick="downloadRequestExcel('${req.request_id}')" ${hasData || isDownloaded ? '' : 'disabled'}>
+                            ${downloadBtnText}
+                        </button>
+                    </div>
+                    <div id="result-${req.request_id}" class="request-card-result" style="display: none;"></div>
+                </div>
+            `;
+        }).join('');
+
+        // Запускаем таймеры для всех запросов (кроме готовых и скачанных)
+        visibleRequests.forEach(req => {
+            if (req.collect_at && req.status !== 'ready' && req.status !== 'downloaded') {
+                const moscowTime = formatMoscowTime(req.collect_at);
+                startRequestCountdown(req.request_id, new Date(req.collect_at), moscowTime);
+            }
+        });
+    }
+
+    // Запустить таймер обратного отсчёта для конкретного запроса
+    function startRequestCountdown(requestId, targetTime, formattedTime) {
+        // Останавливаем старый таймер если есть
+        if (requestTimers[requestId]) {
+            clearInterval(requestTimers[requestId]);
+        }
+
+        const timerEl = document.getElementById(`timer-${requestId}`);
+        const badgeEl = document.getElementById(`badge-${requestId}`);
+        const cardEl = document.getElementById(`request-card-${requestId}`);
+
+        if (!timerEl) return;
+
+        function updateTimer() {
+            const now = new Date();
+            const diff = targetTime - now;
+
+            if (diff <= 0) {
+                clearInterval(requestTimers[requestId]);
+                delete requestTimers[requestId];
+
+                timerEl.innerHTML = `<strong>⏰ Время сбора завершено!</strong> Нажмите "Проверить"`;
+                if (badgeEl) {
+                    badgeEl.className = 'request-card-badge ready';
+                    badgeEl.textContent = '✅ Готово';
+                }
+                if (cardEl) cardEl.classList.add('ready');
+
+                // Воспроизводим звук только один раз для каждой заявки
+                if (!notifiedRequests.has(requestId)) {
+                    notifiedRequests.add(requestId);
+                    playNotificationSound();
+                }
+                return;
+            }
+
+            const minutes = Math.floor(diff / 60000);
+            const seconds = Math.floor((diff % 60000) / 1000);
+            const timeStr = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+            timerEl.textContent = `⏳ Сводка готова через ${timeStr} (до ${formattedTime} мск)`;
+        }
+
+        updateTimer();
+        requestTimers[requestId] = setInterval(updateTimer, 1000);
+    }
+
+    // Проверить готовность конкретного запроса
+    async function checkRequestStatus(requestId) {
+        const btn = document.getElementById(`btn-check-${requestId}`);
+        const resultEl = document.getElementById(`result-${requestId}`);
+        const badgeEl = document.getElementById(`badge-${requestId}`);
+        const downloadBtn = document.getElementById(`btn-download-${requestId}`);
+        const cardEl = document.getElementById(`request-card-${requestId}`);
+        const statusEl = document.getElementById(`status-${requestId}`);
+        const timerEl = document.getElementById(`timer-${requestId}`);
+
+        if (!btn) return;
+
+        btn.disabled = true;
+        btn.textContent = '⏳ Проверка...';
+
+        try {
+            const url = `https://primary-production-4e88.up.railway.app/webhook/get-supplier-summary?request_id=${encodeURIComponent(requestId)}`;
+            console.log('🔍 Проверяем сводку:', url);
+
+            const response = await fetch(url);
+            const result = await response.json();
+
+            console.log('📊 Ответ сводки:', result);
+
+            resultEl.style.display = 'block';
+
+            if (result.success && result.ready) {
+                // Сводка готова!
+                if (requestTimers[requestId]) {
+                    clearInterval(requestTimers[requestId]);
+                    delete requestTimers[requestId];
+                }
+
+                // Сохраняем данные для скачивания
+                requestSummaryData[requestId] = result;
+
+                // Обновляем UI
+                badgeEl.className = 'request-card-badge ready';
+                badgeEl.textContent = '✅ Готово';
+                cardEl.classList.add('ready');
+                downloadBtn.disabled = false;
+
+                // Форматируем цену
+                const priceFormatted = result.total_best_price
+                    ? result.total_best_price.toLocaleString('ru-RU') + ' ₽'
+                    : 'N/A';
+
+                // Список поставщиков
+                const suppliersList = result.suppliers && result.suppliers.length > 0
+                    ? `<div class="suppliers-list">Ответили: ${result.suppliers.join(', ')}</div>`
+                    : '';
+
+                statusEl.textContent = `Ответили: ${result.responses_count} из ${result.suppliers_count} поставщиков`;
+                timerEl.innerHTML = '';
+
+                resultEl.className = 'request-card-result';
+                resultEl.innerHTML = `
+                    <strong>✅ Сводка готова!</strong><br>
+                    Лучшая цена: <strong>${priceFormatted}</strong>
+                    ${suppliersList}
+                `;
+
+                // Обновляем статус в массиве
+                const reqIndex = activeRequests.findIndex(r => r.request_id === requestId);
+                if (reqIndex >= 0) {
+                    activeRequests[reqIndex].status = 'ready';
+                    saveActiveRequests();
+                }
+
+            } else if (result.success && !result.ready) {
+                // Ещё собирается
+                resultEl.className = 'request-card-result';
+                resultEl.textContent = `⏳ ${result.message || 'Сбор ответов ещё идёт...'}`;
+
+            } else {
+                throw new Error(result.error || 'Неизвестная ошибка');
+            }
+
+        } catch (error) {
+            console.error('❌ Ошибка проверки сводки:', error);
+            resultEl.className = 'request-card-result error';
+            resultEl.textContent = `❌ Ошибка: ${error.message}`;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '🔄 Проверить';
+        }
+    }
+
+    // Скачать Excel для конкретного запроса
+    function downloadRequestExcel(requestId) {
+        const data = requestSummaryData[requestId];
+
+        if (!data || !data.excel_base64) {
+            alert('Сначала нажмите "Проверить" чтобы загрузить данные');
+            return;
+        }
+
+        try {
+            const byteCharacters = atob(data.excel_base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            });
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = data.excel_filename || `Сводка_${requestId}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            console.log('📥 Excel скачан:', data.excel_filename);
+
+            // Обновляем статус на "downloaded" и сохраняем
+            const reqIndex = activeRequests.findIndex(r => r.request_id === requestId);
+            if (reqIndex >= 0) {
+                activeRequests[reqIndex].status = 'downloaded';
+                activeRequests[reqIndex].downloaded_at = new Date().toISOString();
+                saveActiveRequests();
+            }
+
+            // Обновляем UI - показываем статус "Скачано"
+            const badgeEl = document.getElementById(`badge-${requestId}`);
+            const downloadBtn = document.getElementById(`btn-download-${requestId}`);
+            if (badgeEl) {
+                badgeEl.className = 'request-card-badge downloaded';
+                badgeEl.textContent = '✅ Скачано';
+            }
+            if (downloadBtn) {
+                downloadBtn.innerHTML = '✅ Скачано';
+                downloadBtn.classList.add('downloaded');
+            }
+
+        } catch (error) {
+            console.error('❌ Ошибка скачивания Excel:', error);
+            alert('Ошибка при скачивании файла: ' + error.message);
+        }
+    }
+
+    // Показать панель отслеживания сводки (вызывается после отправки)
+    function showSummaryTrackingPanel(result) {
+        addActiveRequest(result);
+    }
+
+    // Форматирование цены
+    function formatPrice(price) {
+        if (!price && price !== 0) return 'N/A';
+        return price.toLocaleString('ru-RU');
+    }
+
+    // Форматирование времени в московской таймзоне (UTC+3)
+    function formatMoscowTime(isoString) {
+        if (!isoString) return '';
+        try {
+            const date = new Date(isoString);
+            // Форматируем в московском времени
+            return date.toLocaleTimeString('ru-RU', {
+                timeZone: 'Europe/Moscow',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch (e) {
+            console.error('Ошибка форматирования времени:', e);
+            return '';
+        }
+    }
+    </script>
+</body>
+</html>
