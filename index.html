@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.29</p>
+            <p>MSG Закупки v4.30</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -3202,25 +3202,22 @@
                 cardEl.classList.add('ready');
                 downloadBtn.disabled = false;
 
-                // Форматируем цену
-                const priceFormatted = result.total_best_price
-                    ? result.total_best_price.toLocaleString('ru-RU') + ' ₽'
-                    : 'N/A';
-
-                // Список поставщиков
+                // Список поставщиков (кто ответил)
                 const suppliersList = result.suppliers && result.suppliers.length > 0
-                    ? `<div class="suppliers-list">Ответили: ${result.suppliers.join(', ')}</div>`
+                    ? result.suppliers.join(', ')
                     : '';
 
                 statusEl.textContent = `Ответили: ${result.responses_count} из ${result.suppliers_count} поставщиков`;
                 timerEl.innerHTML = '';
 
-                resultEl.className = 'request-card-result';
-                resultEl.innerHTML = `
-                    <strong>✅ Сводка готова!</strong><br>
-                    Лучшая цена: <strong>${priceFormatted}</strong>
-                    ${suppliersList}
-                `;
+                // Показываем только список поставщиков (без "Сводка готова" и "Лучшая цена")
+                if (suppliersList) {
+                    resultEl.className = 'request-card-result';
+                    resultEl.innerHTML = `<div class="suppliers-list">${suppliersList}</div>`;
+                    resultEl.style.display = 'block';
+                } else {
+                    resultEl.style.display = 'none';
+                }
 
                 // Обновляем статус в массиве
                 const reqIndex = activeRequests.findIndex(r => r.request_id === requestId);
