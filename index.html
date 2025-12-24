@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.27</p>
+            <p>MSG Закупки v4.28</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -2786,7 +2786,7 @@
 
             // Также показываем результаты расчёта
             document.getElementById('results-section').classList.remove('hidden');
-            updateTotals(results);
+            updateTotals(); // Обновляем итоги без параметра
 
         } catch (error) {
             console.error('❌ Ошибка при формировании запроса:', error);
