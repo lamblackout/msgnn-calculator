@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.40</p>
+            <p>MSG Закупки v4.41</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -2516,7 +2516,11 @@
 
         // ✅ ПРОФИЛЬНЫЕ ТРУБЫ, УГОЛКИ, ПОЛОСА, БЕСШОВНЫЕ ТРУБЫ - размеры как строки "180х180х6" или "4х40" (в нижнем регистре х)
         const stringFormulasAsIs = [
-            'tryba_kvadr_linear', 'tryba_pr_linear', 'tryba_pr_galv_linear', 'tryba_es_linear', 'tryba_es_galv_linear',
+            'tryba_kvadr_linear', 'tryba_kvadr_galv_linear',  // Труба квадр., Труба квадр. оц.
+            'tryba_pr_linear', 'tryba_pr_galv_linear',        // Труба прямоуг.
+            'tryba_es_linear', 'tryba_es_galv_linear',        // Труба э/св
+            'tryba_oval_linear', 'tryba_oval_galv_linear',    // Труба овал., Труба овал. оц.
+            'tryba_ploskooval_linear', 'tryba_ploskooval_galv_linear',  // Труба плоскоовал.
             'ygolok_linear', 'ygolok_galv_linear', 'ygolok_gnyt_linear', 'ygolok_gnyt_galv_linear',
             'strip_linear', 'strip_galv_linear',  // Полоса - размеры "толщинахширина" (4х40)
             // Бесшовные трубы - размеры "диаметрхтолщина" (14х3)
@@ -2524,6 +2528,7 @@
             'vgp_linear', 'vgp_galv_linear',      // Труба ВГП
             'tryba_xd_linear', 'tryba_xd_galv_linear',  // Труба б/ш х/д
             'linear',                              // Труба б/ш котельная
+            'pnd_linear',                          // Труба ПНД
             'sytynka_steel'                        // Сутунка (60х500)
         ];
         if (stringFormulasAsIs.includes(metal.formula)) {
