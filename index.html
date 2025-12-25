@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.42</p>
+            <p>MSG Закупки v4.43</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -2531,6 +2531,8 @@
             'tryba_oval_linear', 'tryba_oval_galv_linear',    // Труба овал., Труба овал. оц.
             'tryba_ploskooval_linear', 'tryba_ploskooval_galv_linear',  // Труба плоскоовал.
             'ygolok_linear', 'ygolok_galv_linear', 'ygolok_gnyt_linear', 'ygolok_gnyt_galv_linear',
+            'shveller_gnyt_linear', 'shveller_gnyt_galv_linear',  // Швеллер гнутый
+            'shpynt_3fields',                      // Шпунты - размеры как строки (Л4, Л5-УМ, и т.д.)
             'strip_linear', 'strip_galv_linear',  // Полоса - размеры "толщинахширина" (4х40)
             // Бесшовные трубы - размеры "диаметрхтолщина" (14х3)
             'gd_linear', 'gd_galv_linear',        // Труба б/ш г/д
@@ -2541,6 +2543,14 @@
             'sytynka_steel'                        // Сутунка (60х500)
         ];
         if (stringFormulasAsIs.includes(metal.formula)) {
+            // ✅ ШПУНТЫ - передаём размер как есть, только нормализуем / на \
+            // (в базе coefficients используют \ вместо /)
+            if (metal.formula === 'shpynt_3fields') {
+                let normalizedSize = sizeStr.replace(/\//g, '\\');
+                console.log(`📋 Шпунт: размер "${sizeStr}" -> "${normalizedSize}"`);
+                return normalizedSize;
+            }
+
             // Нормализуем разделитель к русской х (так в базе)
             let normalizedSize = sizeStr.replace(/[xX×]/g, 'х');
 
