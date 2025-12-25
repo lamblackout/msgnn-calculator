@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.34</p>
+            <p>MSG Закупки v4.35</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -2422,11 +2422,17 @@
             return normalizedSize;
         }
 
-        // ✅ ПРОФИЛЬНЫЕ ТРУБЫ, УГОЛКИ, ПОЛОСА - размеры как строки "180х180х6" или "4х40" (в нижнем регистре х)
+        // ✅ ПРОФИЛЬНЫЕ ТРУБЫ, УГОЛКИ, ПОЛОСА, БЕСШОВНЫЕ ТРУБЫ - размеры как строки "180х180х6" или "4х40" (в нижнем регистре х)
         const stringFormulasAsIs = [
             'tryba_kvadr_linear', 'tryba_pr_linear', 'tryba_pr_galv_linear', 'tryba_es_linear', 'tryba_es_galv_linear',
             'ygolok_linear', 'ygolok_galv_linear', 'ygolok_gnyt_linear', 'ygolok_gnyt_galv_linear',
-            'strip_linear', 'strip_galv_linear'  // Полоса - размеры "толщинахширина" (4х40)
+            'strip_linear', 'strip_galv_linear',  // Полоса - размеры "толщинахширина" (4х40)
+            // Бесшовные трубы - размеры "диаметрхтолщина" (14х3)
+            'gd_linear', 'gd_galv_linear',        // Труба б/ш г/д
+            'vgp_linear', 'vgp_galv_linear',      // Труба ВГП
+            'tryba_xd_linear', 'tryba_xd_galv_linear',  // Труба б/ш х/д
+            'linear',                              // Труба б/ш котельная
+            'sytynka_steel'                        // Сутунка (60х500)
         ];
         if (stringFormulasAsIs.includes(metal.formula)) {
             // Нормализуем разделитель к русской х (так в базе)
