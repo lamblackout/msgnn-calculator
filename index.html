@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.32</p>
+            <p>MSG Закупки v4.33</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -2014,7 +2014,7 @@
                 const TYPES_NEEDING_STEEL_COEFFICIENT = [
                     // НЕ включаем типы, где калькулятор уже обрабатывает марку стали:
                     // strip, strip_galv (formula: strip_linear/strip_galv_linear)
-                    // wire, wire_galv (formula: wire_linear/wire_galv_linear)
+                    'wire', 'wire_galv',  // Проволока, Проволока оцинк.
                     'wire_rod',           // Катанка
                     'square',             // Квадрат
                     'circle', 'circle_galv', // Круг, Круг оц.
@@ -2331,7 +2331,8 @@
                     // ✅ Коэффициент плотности стали для типов как на 23met.ru
                     const BASE_DENSITY = 7.85;
                     const TYPES_NEEDING_STEEL_COEFFICIENT = [
-                        // НЕ включаем: strip, strip_galv, wire, wire_galv (калькулятор уже обрабатывает)
+                        // НЕ включаем: strip, strip_galv (калькулятор уже обрабатывает)
+                        'wire', 'wire_galv',  // Проволока, Проволока оцинк.
                         'wire_rod',           // Катанка
                         'square',             // Квадрат
                         'circle', 'circle_galv', // Круг, Круг оц.
@@ -2755,7 +2756,8 @@
                     // ✅ Коэффициент плотности стали для типов как на 23met.ru
                     const BASE_DENSITY = 7.85;
                     const TYPES_NEEDING_STEEL_COEFFICIENT = [
-                        // НЕ включаем: strip, strip_galv, wire, wire_galv (калькулятор уже обрабатывает)
+                        // НЕ включаем: strip, strip_galv (калькулятор уже обрабатывает)
+                        'wire', 'wire_galv',  // Проволока, Проволока оцинк.
                         'wire_rod',           // Катанка
                         'square',             // Квадрат
                         'circle', 'circle_galv', // Круг, Круг оц.
