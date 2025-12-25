@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.44</p>
+            <p>MSG Закупки v4.45</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -2092,6 +2092,40 @@
                 // ✅ ВСЕГДА применяем результаты от calculateMetal
                 // Они уже включают округление до целых штук!
                 // Это значит: если ввели вес 20.467т, а округление даёт 21.264т — показываем 21.264т
+
+                // ✅ Табличные коэффициенты для арматуры по ГОСТ (кг/м)
+                // Формула даёт немного другие значения из-за округления плотности
+                const ARMATURE_GOST_COEFFICIENTS = {
+                    5: 0.154, 5.5: 0.186, 6: 0.222, 6.5: 0.260, 7.5: 0.347, 7.8: 0.375,
+                    8: 0.395, 10: 0.617, 11: 0.746, 12: 0.888, 14: 1.21, 16: 1.58,
+                    18: 2.0, 20: 2.47, 22: 2.98, 25: 3.85, 28: 4.83, 30: 5.55,
+                    32: 6.31, 36: 7.99, 40: 9.87
+                };
+                const ARMATURE_TYPES = ['armature_a1', 'armature_a1_galv', 'armature_a3', 'armature_a3_galv', 'armature_at800', 'armature_at1000'];
+
+                if (ARMATURE_TYPES.includes(item.metal_key) && result.weight !== null) {
+                    const sizeNum = parseFloat(item.size);
+                    const gostCoef = ARMATURE_GOST_COEFFICIENTS[sizeNum];
+                    if (gostCoef) {
+                        // Пересчитываем по табличному коэффициенту
+                        const formulaCoef = Math.PI * Math.pow(sizeNum / 2000, 2) * 7850; // кг/м по формуле
+                        const correctionFactor = gostCoef / formulaCoef;
+                        console.log(`  🔧 Арматура d=${sizeNum}: ГОСТ=${gostCoef} кг/м, формула=${formulaCoef.toFixed(4)} кг/м, коррекция=${correctionFactor.toFixed(4)}`);
+
+                        // Корректируем все значения
+                        if (result.length !== null) {
+                            result.length = Math.round(result.length / correctionFactor * 100) / 100;
+                        }
+                        if (result.pieces !== null) {
+                            // Пересчитываем штуки от скорректированной длины
+                            const lengthPerPiece = parseFloat(item.length_per_piece) || 6;
+                            result.pieces = Math.round(result.length / lengthPerPiece);
+                            result.length = result.pieces * lengthPerPiece;
+                            // Пересчитываем вес от фактических штук
+                            result.weight = Math.round(result.length * gostCoef / 1000 * 1000) / 1000;
+                        }
+                    }
+                }
 
                 // ✅ Коэффициент плотности стали для типов как на 23met.ru
                 const BASE_DENSITY = 7.85;
