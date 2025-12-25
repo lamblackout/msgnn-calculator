@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.33</p>
+            <p>MSG Закупки v4.34</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -1759,11 +1759,15 @@
     function onSizeChange(index, value) {
         if (value === '_custom') {
             state.items[index].size = '';
+            saveState();
+            renderTable();
         } else {
             state.items[index].size = value;
+            saveState();
+            // Пересчитываем при смене размера
+            recalculateRow(index, 'size');
+            renderTable();
         }
-        saveState();
-        renderTable();
     }
 
     function onFieldChange(index, field, value) {
@@ -2014,7 +2018,7 @@
                 const TYPES_NEEDING_STEEL_COEFFICIENT = [
                     // НЕ включаем типы, где калькулятор уже обрабатывает марку стали:
                     // strip, strip_galv (formula: strip_linear/strip_galv_linear)
-                    'wire', 'wire_galv',  // Проволока, Проволока оцинк.
+                    // wire, wire_galv (formula: provoloka_linear/wire_galv_linear) - база имеет steelDensities
                     'wire_rod',           // Катанка
                     'square',             // Квадрат
                     'circle', 'circle_galv', // Круг, Круг оц.
@@ -2331,8 +2335,7 @@
                     // ✅ Коэффициент плотности стали для типов как на 23met.ru
                     const BASE_DENSITY = 7.85;
                     const TYPES_NEEDING_STEEL_COEFFICIENT = [
-                        // НЕ включаем: strip, strip_galv (калькулятор уже обрабатывает)
-                        'wire', 'wire_galv',  // Проволока, Проволока оцинк.
+                        // НЕ включаем: strip, strip_galv, wire, wire_galv (калькулятор уже обрабатывает)
                         'wire_rod',           // Катанка
                         'square',             // Квадрат
                         'circle', 'circle_galv', // Круг, Круг оц.
@@ -2756,8 +2759,7 @@
                     // ✅ Коэффициент плотности стали для типов как на 23met.ru
                     const BASE_DENSITY = 7.85;
                     const TYPES_NEEDING_STEEL_COEFFICIENT = [
-                        // НЕ включаем: strip, strip_galv (калькулятор уже обрабатывает)
-                        'wire', 'wire_galv',  // Проволока, Проволока оцинк.
+                        // НЕ включаем: strip, strip_galv, wire, wire_galv (калькулятор уже обрабатывает)
                         'wire_rod',           // Катанка
                         'square',             // Квадрат
                         'circle', 'circle_galv', // Круг, Круг оц.
