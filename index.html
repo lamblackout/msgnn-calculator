@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.36</p>
+            <p>MSG Закупки v4.37</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -1889,7 +1889,12 @@
                 params.railType = item.size;  // Тип рельса
                 params.variant = item.standard;  // Вариант (ГОСТ)
             } else {
-                params.standard = item.standard;  // Для профнастила
+                // Для профнастила - находим полный объект стандарта с коэффициентом
+                const standards = getStandardsForMetal(item.metal_key, item.size);
+                const standardObj = standards.find(s => s.name === item.standard);
+                if (standardObj) {
+                    params.standard = standardObj;  // Передаём объект {name, coefficient}
+                }
             }
         }
 
@@ -1997,7 +2002,12 @@
                 params.railType = item.size;  // Тип рельса
                 params.variant = item.standard;  // Вариант (ГОСТ)
             } else {
-                params.standard = item.standard;  // Для профнастила
+                // Для профнастила - находим полный объект стандарта с коэффициентом
+                const standards = getStandardsForMetal(item.metal_key, item.size);
+                const standardObj = standards.find(s => s.name === item.standard);
+                if (standardObj) {
+                    params.standard = standardObj;  // Передаём объект {name, coefficient}
+                }
             }
         }
 
@@ -2280,7 +2290,12 @@
                     params.railType = item.size;  // Тип рельса
                     params.variant = item.standard;  // Вариант (ГОСТ)
                 } else {
-                    params.standard = item.standard;  // Для профнастила
+                    // Для профнастила - находим полный объект стандарта с коэффициентом
+                    const standards = getStandardsForMetal(item.metal_key, item.size);
+                    const standardObj = standards.find(s => s.name === item.standard);
+                    if (standardObj) {
+                        params.standard = standardObj;  // Передаём объект {name, coefficient}
+                    }
                 }
             }
 
@@ -2813,7 +2828,12 @@
                     params.railType = item.size;  // Тип рельса
                     params.variant = item.standard;  // Вариант (ГОСТ)
                 } else {
-                    params.standard = item.standard;  // Для профнастила
+                    // Для профнастила - находим полный объект стандарта с коэффициентом
+                    const standards = getStandardsForMetal(item.metal_key, item.size);
+                    const standardObj = standards.find(s => s.name === item.standard);
+                    if (standardObj) {
+                        params.standard = standardObj;  // Передаём объект {name, coefficient}
+                    }
                 }
             }
 
