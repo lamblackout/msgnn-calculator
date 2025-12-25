@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.53</p>
+            <p>MSG Закупки v4.54</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -922,8 +922,8 @@
         'strip_tape', 'strip_tape_painted', 'strip_tape_galv'  // Лента/штрипс
     ];
 
-    // Типы с выбором стандарта/варианта (профнастил, рельсы, лист ПВ, лист рифленый, лист окраш.)
-    const TYPES_WITH_STANDARDS = ['profnastil_okrash', 'profnastil_ocink', 'rels', 'sheet_pv', 'sheet_pv_galv', 'sheet_checkered', 'sheet_painted'];
+    // Типы с выбором стандарта/варианта (профнастил, рельсы, лист ПВ, лист рифленый, лист окраш., лист оцинк.)
+    const TYPES_WITH_STANDARDS = ['profnastil_okrash', 'profnastil_ocink', 'rels', 'sheet_pv', 'sheet_pv_galv', 'sheet_checkered', 'sheet_painted', 'sheet_galv'];
 
     // Стандартные длины для типов
     const STANDARD_LENGTHS = {
@@ -1915,8 +1915,8 @@
             } else if (item.metal_key === 'sheet_checkered') {
                 // Для листа рифленого - передаём тип рифления
                 params.riffleType = item.standard;
-            } else if (item.metal_key === 'sheet_painted') {
-                // Для листа окрашенного - передаём тип оцинковки
+            } else if (item.metal_key === 'sheet_painted' || item.metal_key === 'sheet_galv') {
+                // Для листа окрашенного/оцинкованного - передаём тип оцинковки
                 params.zincOption = item.standard;
             } else {
                 // Для профнастила - находим полный объект стандарта с коэффициентом
@@ -2037,8 +2037,8 @@
             } else if (item.metal_key === 'sheet_checkered') {
                 // Для листа рифленого - передаём тип рифления
                 params.riffleType = item.standard;
-            } else if (item.metal_key === 'sheet_painted') {
-                // Для листа окрашенного - передаём тип оцинковки
+            } else if (item.metal_key === 'sheet_painted' || item.metal_key === 'sheet_galv') {
+                // Для листа окрашенного/оцинкованного - передаём тип оцинковки
                 params.zincOption = item.standard;
             } else {
                 // Для профнастила - находим полный объект стандарта с коэффициентом
