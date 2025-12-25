@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.46</p>
+            <p>MSG Закупки v4.47</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -1201,7 +1201,7 @@
 
         return {
             showWeight: true,  // Вес всегда
-            showLength: !isSheet && !isFastener,  // Длина (не для листов и крепежа)
+            showLength: !isFastener,  // Длина (для листов = площадь м²)
             showPieces: !noPieces,  // Штуки (не для канатов, проволоки и т.д.)
             showLengthPiece: hasLengthPiece && !isSheet,  // Длина 1 шт
             showWidth: isSheet,  // Ширина листа
