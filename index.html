@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.45</p>
+            <p>MSG Закупки v4.46</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -2152,7 +2152,7 @@
 
                 // ✅ Коэффициент оцинковки 1.03 для типов, которые не учитывают его в формуле
                 const GALV_COEFFICIENT = 1.03;
-                const GALV_TYPES_NEEDING_COEFFICIENT = ['circle_galv'];
+                const GALV_TYPES_NEEDING_COEFFICIENT = ['circle_galv', 'armature_a1_galv', 'armature_a3_galv'];
                 if (GALV_TYPES_NEEDING_COEFFICIENT.includes(item.metal_key) && result.weight !== null) {
                     console.log(`  🔧 Применяем коэффициент оцинковки ${GALV_COEFFICIENT} для ${item.metal_key}`);
                     result.weight = Math.round(result.weight * GALV_COEFFICIENT * 1000) / 1000;
@@ -2493,7 +2493,7 @@
 
                     // ✅ Коэффициент оцинковки 1.03 для типов, которые не учитывают его в формуле
                     const GALV_COEFFICIENT = 1.03;
-                    const GALV_TYPES_NEEDING_COEFFICIENT = ['circle_galv'];
+                    const GALV_TYPES_NEEDING_COEFFICIENT = ['circle_galv', 'armature_a1_galv', 'armature_a3_galv'];
                     if (GALV_TYPES_NEEDING_COEFFICIENT.includes(item.metal_key)) {
                         console.log(`  🔧 Применяем коэффициент оцинковки ${GALV_COEFFICIENT} для ${item.metal_key}`);
                         result.weight = Math.round(result.weight * GALV_COEFFICIENT * 1000) / 1000;
@@ -2948,7 +2948,7 @@
 
                     // ✅ Коэффициент оцинковки 1.03 для типов, которые не учитывают его в формуле
                     const GALV_COEFFICIENT = 1.03;
-                    const GALV_TYPES_NEEDING_COEFFICIENT = ['circle_galv'];
+                    const GALV_TYPES_NEEDING_COEFFICIENT = ['circle_galv', 'armature_a1_galv', 'armature_a3_galv'];
                     if (GALV_TYPES_NEEDING_COEFFICIENT.includes(item.metal_key) && result.weight !== null) {
                         console.log(`  🔧 Применяем коэффициент оцинковки ${GALV_COEFFICIENT} для ${item.metal_key}`);
                         result.weight = Math.round(result.weight * GALV_COEFFICIENT * 1000) / 1000;
