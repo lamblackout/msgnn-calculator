@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.48</p>
+            <p>MSG Закупки v4.49</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -922,8 +922,8 @@
         'strip_tape', 'strip_tape_painted', 'strip_tape_galv'  // Лента/штрипс
     ];
 
-    // Типы с выбором стандарта/варианта (профнастил, рельсы)
-    const TYPES_WITH_STANDARDS = ['profnastil_okrash', 'profnastil_ocink', 'rels'];
+    // Типы с выбором стандарта/варианта (профнастил, рельсы, лист ПВ)
+    const TYPES_WITH_STANDARDS = ['profnastil_okrash', 'profnastil_ocink', 'rels', 'sheet_pv', 'sheet_pv_galv'];
 
     // Стандартные длины для типов
     const STANDARD_LENGTHS = {
@@ -1173,7 +1173,7 @@
         return [];
     }
 
-    // Получение стандартов/вариантов для типа металла (профнастил, рельсы)
+    // Получение стандартов/вариантов для типа металла (профнастил, рельсы, лист ПВ)
     function getStandardsForMetal(metalKey, size) {
         const metal = state.metalsDB?.[metalKey];
         if (!metal || !size) return [];
@@ -1185,6 +1185,10 @@
         // Для рельсов - variants[railType]
         if (metal.variants && metal.variants[size]) {
             return metal.variants[size];
+        }
+        // Для листа ПВ - sizeStandards[size]
+        if (metal.sizeStandards && metal.sizeStandards[size]) {
+            return metal.sizeStandards[size];
         }
         return [];
     }
