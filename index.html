@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.37</p>
+            <p>MSG Закупки v4.38</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -2115,14 +2115,19 @@
                     result.weight = Math.round(result.weight * GALV_COEFFICIENT * 1000) / 1000;
                 }
 
-                if (result.weight !== null) {
-                    item.weight = result.weight;
+                // ✅ Поддержка двух форматов: result.weight и result.actual.weight
+                const resWeight = result.weight ?? result.actual?.weight;
+                const resLength = result.length ?? result.actual?.length;
+                const resPieces = result.pieces ?? result.actual?.pieces;
+
+                if (resWeight !== null && resWeight !== undefined) {
+                    item.weight = resWeight;
                 }
-                if (result.length !== null) {
-                    item.length = result.length;
+                if (resLength !== null && resLength !== undefined) {
+                    item.length = resLength;
                 }
-                if (result.pieces !== null) {
-                    item.pieces = result.pieces;
+                if (resPieces !== null && resPieces !== undefined) {
+                    item.pieces = resPieces;
                 }
             }
         } catch (e) {
@@ -2413,9 +2418,10 @@
                 }
 
                 if (calcResult.success) {
-                    result.weight = calcResult.weight;
-                    result.length = calcResult.length;
-                    result.pieces = calcResult.pieces;
+                    // ✅ Поддержка двух форматов: calcResult.weight и calcResult.actual.weight
+                    result.weight = calcResult.weight ?? calcResult.actual?.weight;
+                    result.length = calcResult.length ?? calcResult.actual?.length;
+                    result.pieces = calcResult.pieces ?? calcResult.actual?.pieces;
                     result.weightPerMeter = calcResult.weightPerMeter;
 
                     // ✅ Коэффициент плотности стали для типов как на 23met.ru
@@ -2892,9 +2898,14 @@
                         result.weight = Math.round(result.weight * GALV_COEFFICIENT * 1000) / 1000;
                     }
 
-                    if (result.weight !== null) item.weight = result.weight;
-                    if (result.length !== null) item.length = result.length;
-                    if (result.pieces !== null) item.pieces = result.pieces;
+                    // ✅ Поддержка двух форматов: result.weight и result.actual.weight
+                    const resWeight = result.weight ?? result.actual?.weight;
+                    const resLength = result.length ?? result.actual?.length;
+                    const resPieces = result.pieces ?? result.actual?.pieces;
+
+                    if (resWeight !== null && resWeight !== undefined) item.weight = resWeight;
+                    if (resLength !== null && resLength !== undefined) item.length = resLength;
+                    if (resPieces !== null && resPieces !== undefined) item.pieces = resPieces;
                     console.log(`  ✅ Позиция ${index + 1}: вес=${item.weight}т, длина=${item.length}м, шт=${item.pieces}`);
                 }
             } catch (e) {
