@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.30</p>
+            <p>MSG Закупки v4.32</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -915,9 +915,11 @@
     // Листовые типы (Ширина и Длина листа вместо Длины)
     const SHEET_TYPES = [
         'sheet_hot', 'sheet_cold', 'sheet_galv', 'sheet_painted',
-        'sheet_riffle', 'sheet_pv', 'sheet_korr', 'sheet_pvl',
-        'plate_hot', 'plate_cold',
-        'tape', 'tape_galv', 'tape_cold'
+        'sheet_checkered',  // Лист рифленый (был sheet_riffle - неправильный ключ)
+        'sheet_pv', 'sheet_pv_galv', 'sheet_korr', 'sheet_pvl',
+        'plate', 'plate_hot', 'plate_cold',
+        'tape', 'tape_galv', 'tape_cold',
+        'strip_tape', 'strip_tape_painted', 'strip_tape_galv'  // Лента/штрипс
     ];
 
     // Стандартные длины для типов
@@ -2010,14 +2012,15 @@
                 // ✅ Коэффициент плотности стали для типов как на 23met.ru
                 const BASE_DENSITY = 7.85;
                 const TYPES_NEEDING_STEEL_COEFFICIENT = [
+                    // НЕ включаем типы, где калькулятор уже обрабатывает марку стали:
+                    // strip, strip_galv (formula: strip_linear/strip_galv_linear)
+                    // wire, wire_galv (formula: wire_linear/wire_galv_linear)
                     'wire_rod',           // Катанка
                     'square',             // Квадрат
                     'circle', 'circle_galv', // Круг, Круг оц.
                     'strip_tape', 'strip_tape_painted', 'strip_tape_galv', // Лента/штрипс
                     'sheet_hot', 'sheet_painted', 'sheet_galv', 'sheet_cold', // Листы
                     'plate',              // Плита
-                    'strip', 'strip_galv', // Полоса
-                    'wire', 'wire_galv',  // Проволока
                     'shestigrannik'       // Шестигранник
                 ];
                 if (TYPES_NEEDING_STEEL_COEFFICIENT.includes(item.metal_key) && result.weight !== null) {
@@ -2328,14 +2331,13 @@
                     // ✅ Коэффициент плотности стали для типов как на 23met.ru
                     const BASE_DENSITY = 7.85;
                     const TYPES_NEEDING_STEEL_COEFFICIENT = [
+                        // НЕ включаем: strip, strip_galv, wire, wire_galv (калькулятор уже обрабатывает)
                         'wire_rod',           // Катанка
                         'square',             // Квадрат
                         'circle', 'circle_galv', // Круг, Круг оц.
                         'strip_tape', 'strip_tape_painted', 'strip_tape_galv', // Лента/штрипс
                         'sheet_hot', 'sheet_painted', 'sheet_galv', 'sheet_cold', // Листы
                         'plate',              // Плита
-                        'strip', 'strip_galv', // Полоса
-                        'wire', 'wire_galv',  // Проволока
                         'shestigrannik'       // Шестигранник
                     ];
                     if (TYPES_NEEDING_STEEL_COEFFICIENT.includes(item.metal_key)) {
@@ -2416,10 +2418,11 @@
             return normalizedSize;
         }
 
-        // ✅ ПРОФИЛЬНЫЕ ТРУБЫ И УГОЛКИ - размеры как строки "180х180х6" (в нижнем регистре х)
+        // ✅ ПРОФИЛЬНЫЕ ТРУБЫ, УГОЛКИ, ПОЛОСА - размеры как строки "180х180х6" или "4х40" (в нижнем регистре х)
         const stringFormulasAsIs = [
             'tryba_kvadr_linear', 'tryba_pr_linear', 'tryba_pr_galv_linear', 'tryba_es_linear', 'tryba_es_galv_linear',
-            'ygolok_linear', 'ygolok_galv_linear', 'ygolok_gnyt_linear', 'ygolok_gnyt_galv_linear'
+            'ygolok_linear', 'ygolok_galv_linear', 'ygolok_gnyt_linear', 'ygolok_gnyt_galv_linear',
+            'strip_linear', 'strip_galv_linear'  // Полоса - размеры "толщинахширина" (4х40)
         ];
         if (stringFormulasAsIs.includes(metal.formula)) {
             // Нормализуем разделитель к русской х (так в базе)
@@ -2447,13 +2450,14 @@
                 }
             }
 
-            const typeLabel = metal.formula.includes('ygolok') ? 'Уголок' : 'Профильная труба';
+            let typeLabel = 'Профильная труба';
+            if (metal.formula.includes('ygolok')) typeLabel = 'Уголок';
+            if (metal.formula.includes('strip')) typeLabel = 'Полоса';
             console.log(`📋 ${typeLabel}: размер "${sizeStr}" -> "${normalizedSize}"`);
             return normalizedSize;
         }
 
         // ✅ ТРУБЫ (старые формулы) - размеры это массивы чисел [60, 40, 3]
-        // ВАЖНО: sheet и strip НЕ здесь - для них размер это просто толщина (число)
         const arrayFormulas = ['pipe', 'pipe_pnd', 'pipe_square', 'pipe_oval', 'pipe_rect', 'angle'];
         if (arrayFormulas.includes(metal.formula)) {
             // Разбиваем размер на части: "60х40х3" -> [60, 40, 3]
@@ -2751,14 +2755,13 @@
                     // ✅ Коэффициент плотности стали для типов как на 23met.ru
                     const BASE_DENSITY = 7.85;
                     const TYPES_NEEDING_STEEL_COEFFICIENT = [
+                        // НЕ включаем: strip, strip_galv, wire, wire_galv (калькулятор уже обрабатывает)
                         'wire_rod',           // Катанка
                         'square',             // Квадрат
                         'circle', 'circle_galv', // Круг, Круг оц.
                         'strip_tape', 'strip_tape_painted', 'strip_tape_galv', // Лента/штрипс
                         'sheet_hot', 'sheet_painted', 'sheet_galv', 'sheet_cold', // Листы
                         'plate',              // Плита
-                        'strip', 'strip_galv', // Полоса
-                        'wire', 'wire_galv',  // Проволока
                         'shestigrannik'       // Шестигранник
                     ];
                     if (TYPES_NEEDING_STEEL_COEFFICIENT.includes(item.metal_key) && result.weight !== null) {
