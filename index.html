@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.49</p>
+            <p>MSG Закупки v4.50</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -1896,11 +1896,14 @@
             width: 1 // Для листов: 1м² (1м × 1м)
         };
 
-        // Для профнастила и рельсов добавляем стандарт/вариант
+        // Для профнастила, рельсов и листа ПВ добавляем стандарт/вариант
         if (TYPES_WITH_STANDARDS.includes(item.metal_key) && item.standard) {
             if (item.metal_key === 'rels') {
                 params.railType = item.size;  // Тип рельса
                 params.variant = item.standard;  // Вариант (ГОСТ)
+            } else if (item.metal_key === 'sheet_pv' || item.metal_key === 'sheet_pv_galv') {
+                // Для листа ПВ - передаём строку (название стандарта)
+                params.standard = item.standard;
             } else {
                 // Для профнастила - находим полный объект стандарта с коэффициентом
                 const standards = getStandardsForMetal(item.metal_key, item.size);
@@ -2009,11 +2012,14 @@
             steelType: item.steel_grade || 'ст3'
         };
 
-        // Для профнастила и рельсов добавляем стандарт/вариант
+        // Для профнастила, рельсов и листа ПВ добавляем стандарт/вариант
         if (TYPES_WITH_STANDARDS.includes(item.metal_key) && item.standard) {
             if (item.metal_key === 'rels') {
                 params.railType = item.size;  // Тип рельса
                 params.variant = item.standard;  // Вариант (ГОСТ)
+            } else if (item.metal_key === 'sheet_pv' || item.metal_key === 'sheet_pv_galv') {
+                // Для листа ПВ - передаём строку (название стандарта)
+                params.standard = item.standard;
             } else {
                 // Для профнастила - находим полный объект стандарта с коэффициентом
                 const standards = getStandardsForMetal(item.metal_key, item.size);
@@ -2336,11 +2342,14 @@
                 steelType: item.steel_grade || 'ст3'
             };
 
-            // Для профнастила и рельсов добавляем стандарт/вариант
+            // Для профнастила, рельсов и листа ПВ добавляем стандарт/вариант
             if (TYPES_WITH_STANDARDS.includes(item.metal_key) && item.standard) {
                 if (item.metal_key === 'rels') {
                     params.railType = item.size;  // Тип рельса
                     params.variant = item.standard;  // Вариант (ГОСТ)
+                } else if (item.metal_key === 'sheet_pv' || item.metal_key === 'sheet_pv_galv') {
+                    // Для листа ПВ - передаём строку (название стандарта)
+                    params.standard = item.standard;
                 } else {
                     // Для профнастила - находим полный объект стандарта с коэффициентом
                     const standards = getStandardsForMetal(item.metal_key, item.size);
@@ -2888,11 +2897,14 @@
                 steelType: item.steel_grade || 'ст3'
             };
 
-            // Для профнастила и рельсов добавляем стандарт/вариант
+            // Для профнастила, рельсов и листа ПВ добавляем стандарт/вариант
             if (TYPES_WITH_STANDARDS.includes(item.metal_key) && item.standard) {
                 if (item.metal_key === 'rels') {
                     params.railType = item.size;  // Тип рельса
                     params.variant = item.standard;  // Вариант (ГОСТ)
+                } else if (item.metal_key === 'sheet_pv' || item.metal_key === 'sheet_pv_galv') {
+                    // Для листа ПВ - передаём строку (название стандарта)
+                    params.standard = item.standard;
                 } else {
                     // Для профнастила - находим полный объект стандарта с коэффициентом
                     const standards = getStandardsForMetal(item.metal_key, item.size);
