@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.51</p>
+            <p>MSG Закупки v4.52</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -922,8 +922,8 @@
         'strip_tape', 'strip_tape_painted', 'strip_tape_galv'  // Лента/штрипс
     ];
 
-    // Типы с выбором стандарта/варианта (профнастил, рельсы, лист ПВ, лист рифленый)
-    const TYPES_WITH_STANDARDS = ['profnastil_okrash', 'profnastil_ocink', 'rels', 'sheet_pv', 'sheet_pv_galv', 'sheet_checkered'];
+    // Типы с выбором стандарта/варианта (профнастил, рельсы, лист ПВ, лист рифленый, лист окраш.)
+    const TYPES_WITH_STANDARDS = ['profnastil_okrash', 'profnastil_ocink', 'rels', 'sheet_pv', 'sheet_pv_galv', 'sheet_checkered', 'sheet_painted'];
 
     // Стандартные длины для типов
     const STANDARD_LENGTHS = {
@@ -1173,7 +1173,7 @@
         return [];
     }
 
-    // Получение стандартов/вариантов для типа металла (профнастил, рельсы, лист ПВ, лист рифленый)
+    // Получение стандартов/вариантов для типа металла (профнастил, рельсы, лист ПВ, лист рифленый, лист окраш.)
     function getStandardsForMetal(metalKey, size) {
         const metal = state.metalsDB?.[metalKey];
         if (!metal || !size) return [];
@@ -1193,6 +1193,10 @@
         // Для листа рифленого - riffleTypes (массив строк -> массив объектов)
         if (metal.riffleTypes && metal.riffleTypes.length > 0) {
             return metal.riffleTypes.map(t => ({ name: t }));
+        }
+        // Для листа окрашенного - zincOptions (массив строк -> массив объектов)
+        if (metal.zincOptions && metal.zincOptions.length > 0) {
+            return metal.zincOptions.map(t => ({ name: t }));
         }
         return [];
     }
@@ -1911,6 +1915,9 @@
             } else if (item.metal_key === 'sheet_checkered') {
                 // Для листа рифленого - передаём тип рифления
                 params.riffleType = item.standard;
+            } else if (item.metal_key === 'sheet_painted') {
+                // Для листа окрашенного - передаём тип оцинковки
+                params.zincOption = item.standard;
             } else {
                 // Для профнастила - находим полный объект стандарта с коэффициентом
                 const standards = getStandardsForMetal(item.metal_key, item.size);
@@ -2030,6 +2037,9 @@
             } else if (item.metal_key === 'sheet_checkered') {
                 // Для листа рифленого - передаём тип рифления
                 params.riffleType = item.standard;
+            } else if (item.metal_key === 'sheet_painted') {
+                // Для листа окрашенного - передаём тип оцинковки
+                params.zincOption = item.standard;
             } else {
                 // Для профнастила - находим полный объект стандарта с коэффициентом
                 const standards = getStandardsForMetal(item.metal_key, item.size);
@@ -2360,6 +2370,12 @@
                 } else if (item.metal_key === 'sheet_pv' || item.metal_key === 'sheet_pv_galv') {
                     // Для листа ПВ - передаём строку (название стандарта)
                     params.standard = item.standard;
+                } else if (item.metal_key === 'sheet_checkered') {
+                    // Для листа рифленого - передаём тип рифления
+                    params.riffleType = item.standard;
+                } else if (item.metal_key === 'sheet_painted') {
+                    // Для листа окрашенного - передаём тип оцинковки
+                    params.zincOption = item.standard;
                 } else {
                     // Для профнастила - находим полный объект стандарта с коэффициентом
                     const standards = getStandardsForMetal(item.metal_key, item.size);
@@ -2915,6 +2931,12 @@
                 } else if (item.metal_key === 'sheet_pv' || item.metal_key === 'sheet_pv_galv') {
                     // Для листа ПВ - передаём строку (название стандарта)
                     params.standard = item.standard;
+                } else if (item.metal_key === 'sheet_checkered') {
+                    // Для листа рифленого - передаём тип рифления
+                    params.riffleType = item.standard;
+                } else if (item.metal_key === 'sheet_painted') {
+                    // Для листа окрашенного - передаём тип оцинковки
+                    params.zincOption = item.standard;
                 } else {
                     // Для профнастила - находим полный объект стандарта с коэффициентом
                     const standards = getStandardsForMetal(item.metal_key, item.size);
