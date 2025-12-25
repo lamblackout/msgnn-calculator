@@ -942,17 +942,59 @@
         'rels': [12.5, 25]
     };
 
-    // Марки стали с плотностью
+    // Марки стали с плотностью (расширенный список)
     const STEEL_GRADES = [
-        { value: 'ст3', name: 'ст3', density: 7.85 },
+        // Углеродистые конструкционные стали
         { value: 'ст0', name: 'ст0', density: 7.85 },
+        { value: 'ст1', name: 'ст1', density: 7.85 },
+        { value: 'ст2', name: 'ст2', density: 7.85 },
+        { value: 'ст3', name: 'ст3', density: 7.85 },
+        { value: 'ст08', name: 'ст08', density: 7.871 },
         { value: 'ст10', name: 'ст10', density: 7.856 },
+        { value: 'ст15', name: 'ст15', density: 7.85 },
         { value: 'ст20', name: 'ст20', density: 7.859 },
+        { value: 'ст30', name: 'ст30', density: 7.85 },
         { value: 'ст35', name: 'ст35', density: 7.826 },
+        { value: 'ст40', name: 'ст40', density: 7.85 },
         { value: 'ст45', name: 'ст45', density: 7.826 },
+        { value: 'ст50', name: 'ст50', density: 7.81 },
+        { value: 'ст55', name: 'ст55', density: 7.82 },
+        { value: 'ст60', name: 'ст60', density: 7.8 },
+        // Низколегированные стали
         { value: '09Г2С', name: '09Г2С', density: 7.85 },
+        { value: '10Г2', name: '10Г2', density: 7.79 },
+        { value: '15Г', name: '15Г', density: 7.81 },
+        { value: '20Г', name: '20Г', density: 7.82 },
+        { value: '30Г', name: '30Г', density: 7.81 },
+        { value: '35Г2', name: '35Г2', density: 7.79 },
+        { value: '40Г', name: '40Г', density: 7.81 },
+        { value: '45Г2', name: '45Г2', density: 7.81 },
+        { value: '50Г', name: '50Г', density: 7.81 },
+        { value: '50Г2', name: '50Г2', density: 7.5 },
+        // Хромистые стали
+        { value: '15Х', name: '15Х', density: 7.83 },
+        { value: '20Х', name: '20Х', density: 7.83 },
+        { value: '30Х', name: '30Х', density: 7.82 },
         { value: '40Х', name: '40Х', density: 7.85 },
-        { value: '65Г', name: '65Г', density: 7.85 }
+        { value: '45Х', name: '45Х', density: 7.82 },
+        { value: '50Х', name: '50Х', density: 7.82 },
+        // Рессорно-пружинные стали
+        { value: '65Г', name: '65Г', density: 7.85 },
+        { value: '60С2', name: '60С2', density: 7.68 },
+        { value: '60С2А', name: '60С2А', density: 7.68 },
+        // Инструментальные стали
+        { value: 'У7', name: 'У7', density: 7.83 },
+        { value: 'У8', name: 'У8', density: 7.839 },
+        { value: 'У10', name: 'У10', density: 7.81 },
+        { value: 'У12', name: 'У12', density: 7.83 },
+        // Легированные конструкционные стали
+        { value: '20ХГСА', name: '20ХГСА', density: 7.85 },
+        { value: '30ХГСА', name: '30ХГСА', density: 7.85 },
+        { value: '40ХН', name: '40ХН', density: 7.85 },
+        { value: 'ШХ15', name: 'ШХ15', density: 7.812 },
+        // Быстрорежущие стали
+        { value: 'Р18', name: 'Р18', density: 8.8 },
+        { value: 'Р6М5', name: 'Р6М5', density: 8.15 }
     ];
 
     // ✅ Дефолтные размеры листов из базы данных
@@ -1749,7 +1791,7 @@
         }
 
         // Для остальных полей - полный пересчёт через calculateMetal
-        if (['weight', 'length', 'pieces', 'width', 'length_sheet'].includes(field)) {
+        if (['weight', 'length', 'pieces', 'width', 'length_sheet', 'steel_grade', 'size'].includes(field)) {
             recalculateRow(index, field);
         }
 
@@ -1913,6 +1955,21 @@
             } else {
                 return; // Нет данных для пересчёта
             }
+        } else if (changedField === 'steel_grade' || changedField === 'size') {
+            // ✅ При изменении марки стали или размера - пересчитываем от имеющихся данных
+            // Приоритет: штуки → длина → вес
+            if (item.pieces && parseInt(item.pieces) > 0) {
+                params.pieces = parseInt(item.pieces);
+                console.log(`🔧 Пересчёт от количества штук: ${params.pieces}`);
+            } else if (item.length && parseFloat(item.length) > 0) {
+                params.length = parseFloat(item.length);
+                console.log(`🔧 Пересчёт от длины: ${params.length}м`);
+            } else if (item.weight && parseFloat(item.weight) > 0) {
+                params.weight = parseFloat(item.weight);
+                console.log(`🔧 Пересчёт от веса: ${params.weight}т`);
+            } else {
+                return; // Нет данных для пересчёта
+            }
         } else {
             return; // Нечего пересчитывать
         }
@@ -1949,6 +2006,37 @@
                 // ✅ ВСЕГДА применяем результаты от calculateMetal
                 // Они уже включают округление до целых штук!
                 // Это значит: если ввели вес 20.467т, а округление даёт 21.264т — показываем 21.264т
+
+                // ✅ Коэффициент плотности стали для типов как на 23met.ru
+                const BASE_DENSITY = 7.85;
+                const TYPES_NEEDING_STEEL_COEFFICIENT = [
+                    'wire_rod',           // Катанка
+                    'square',             // Квадрат
+                    'circle', 'circle_galv', // Круг, Круг оц.
+                    'strip_tape', 'strip_tape_painted', 'strip_tape_galv', // Лента/штрипс
+                    'sheet_hot', 'sheet_painted', 'sheet_galv', 'sheet_cold', // Листы
+                    'plate',              // Плита
+                    'strip', 'strip_galv', // Полоса
+                    'wire', 'wire_galv',  // Проволока
+                    'shestigrannik'       // Шестигранник
+                ];
+                if (TYPES_NEEDING_STEEL_COEFFICIENT.includes(item.metal_key) && result.weight !== null) {
+                    const steelGrade = STEEL_GRADES.find(g => g.value === item.steel_grade);
+                    if (steelGrade && steelGrade.density !== BASE_DENSITY) {
+                        const steelCoef = steelGrade.density / BASE_DENSITY;
+                        console.log(`  🔧 Применяем коэффициент плотности ${steelCoef.toFixed(4)} для ${item.steel_grade}`);
+                        result.weight = Math.round(result.weight * steelCoef * 1000) / 1000;
+                    }
+                }
+
+                // ✅ Коэффициент оцинковки 1.03 для типов, которые не учитывают его в формуле
+                const GALV_COEFFICIENT = 1.03;
+                const GALV_TYPES_NEEDING_COEFFICIENT = ['circle_galv'];
+                if (GALV_TYPES_NEEDING_COEFFICIENT.includes(item.metal_key) && result.weight !== null) {
+                    console.log(`  🔧 Применяем коэффициент оцинковки ${GALV_COEFFICIENT} для ${item.metal_key}`);
+                    result.weight = Math.round(result.weight * GALV_COEFFICIENT * 1000) / 1000;
+                }
+
                 if (result.weight !== null) {
                     item.weight = result.weight;
                 }
@@ -2236,6 +2324,42 @@
                     result.length = calcResult.length;
                     result.pieces = calcResult.pieces;
                     result.weightPerMeter = calcResult.weightPerMeter;
+
+                    // ✅ Коэффициент плотности стали для типов как на 23met.ru
+                    const BASE_DENSITY = 7.85;
+                    const TYPES_NEEDING_STEEL_COEFFICIENT = [
+                        'wire_rod',           // Катанка
+                        'square',             // Квадрат
+                        'circle', 'circle_galv', // Круг, Круг оц.
+                        'strip_tape', 'strip_tape_painted', 'strip_tape_galv', // Лента/штрипс
+                        'sheet_hot', 'sheet_painted', 'sheet_galv', 'sheet_cold', // Листы
+                        'plate',              // Плита
+                        'strip', 'strip_galv', // Полоса
+                        'wire', 'wire_galv',  // Проволока
+                        'shestigrannik'       // Шестигранник
+                    ];
+                    if (TYPES_NEEDING_STEEL_COEFFICIENT.includes(item.metal_key)) {
+                        const steelGrade = STEEL_GRADES.find(g => g.value === item.steel_grade);
+                        if (steelGrade && steelGrade.density !== BASE_DENSITY) {
+                            const steelCoef = steelGrade.density / BASE_DENSITY;
+                            console.log(`  🔧 Применяем коэффициент плотности ${steelCoef.toFixed(4)} для ${item.steel_grade} (${steelGrade.density} / ${BASE_DENSITY})`);
+                            result.weight = Math.round(result.weight * steelCoef * 1000) / 1000;
+                            if (result.weightPerMeter) {
+                                result.weightPerMeter = result.weightPerMeter * steelCoef;
+                            }
+                        }
+                    }
+
+                    // ✅ Коэффициент оцинковки 1.03 для типов, которые не учитывают его в формуле
+                    const GALV_COEFFICIENT = 1.03;
+                    const GALV_TYPES_NEEDING_COEFFICIENT = ['circle_galv'];
+                    if (GALV_TYPES_NEEDING_COEFFICIENT.includes(item.metal_key)) {
+                        console.log(`  🔧 Применяем коэффициент оцинковки ${GALV_COEFFICIENT} для ${item.metal_key}`);
+                        result.weight = Math.round(result.weight * GALV_COEFFICIENT * 1000) / 1000;
+                        if (result.weightPerMeter) {
+                            result.weightPerMeter = result.weightPerMeter * GALV_COEFFICIENT;
+                        }
+                    }
 
                     if (result.weight && result.weight > 0) {
                         totalWeight += result.weight;
@@ -2624,6 +2748,36 @@
             try {
                 const result = window.calculateMetal(params, metalDatabase);
                 if (result.success) {
+                    // ✅ Коэффициент плотности стали для типов как на 23met.ru
+                    const BASE_DENSITY = 7.85;
+                    const TYPES_NEEDING_STEEL_COEFFICIENT = [
+                        'wire_rod',           // Катанка
+                        'square',             // Квадрат
+                        'circle', 'circle_galv', // Круг, Круг оц.
+                        'strip_tape', 'strip_tape_painted', 'strip_tape_galv', // Лента/штрипс
+                        'sheet_hot', 'sheet_painted', 'sheet_galv', 'sheet_cold', // Листы
+                        'plate',              // Плита
+                        'strip', 'strip_galv', // Полоса
+                        'wire', 'wire_galv',  // Проволока
+                        'shestigrannik'       // Шестигранник
+                    ];
+                    if (TYPES_NEEDING_STEEL_COEFFICIENT.includes(item.metal_key) && result.weight !== null) {
+                        const steelGrade = STEEL_GRADES.find(g => g.value === item.steel_grade);
+                        if (steelGrade && steelGrade.density !== BASE_DENSITY) {
+                            const steelCoef = steelGrade.density / BASE_DENSITY;
+                            console.log(`  🔧 Применяем коэффициент плотности ${steelCoef.toFixed(4)} для ${item.steel_grade}`);
+                            result.weight = Math.round(result.weight * steelCoef * 1000) / 1000;
+                        }
+                    }
+
+                    // ✅ Коэффициент оцинковки 1.03 для типов, которые не учитывают его в формуле
+                    const GALV_COEFFICIENT = 1.03;
+                    const GALV_TYPES_NEEDING_COEFFICIENT = ['circle_galv'];
+                    if (GALV_TYPES_NEEDING_COEFFICIENT.includes(item.metal_key) && result.weight !== null) {
+                        console.log(`  🔧 Применяем коэффициент оцинковки ${GALV_COEFFICIENT} для ${item.metal_key}`);
+                        result.weight = Math.round(result.weight * GALV_COEFFICIENT * 1000) / 1000;
+                    }
+
                     if (result.weight !== null) item.weight = result.weight;
                     if (result.length !== null) item.length = result.length;
                     if (result.pieces !== null) item.pieces = result.pieces;
