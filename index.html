@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.54</p>
+            <p>MSG Закупки v4.55</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -1686,10 +1686,14 @@
             <!-- Длина 1 шт -->
             <td class="px-2 py-2 col-length-piece">
                 ${standardLengths.length > 0 ? `
-                    <select class="table-select" onchange="onFieldChange(${index}, 'length_per_piece', this.value)">
+                    <select class="table-select" onchange="onLengthPerPieceChange(${index}, this.value)">
                         ${standardLengths.map(l => `<option value="${l}" ${String(l) === String(item.length_per_piece) ? 'selected' : ''}>${l} м</option>`).join('')}
-                        <option value="custom">н/д</option>
+                        <option value="custom" ${item.length_per_piece === 'custom' ? 'selected' : ''}>н/д</option>
                     </select>
+                    <input type="number" class="table-input mt-1" value="${item.length_per_piece_custom || ''}"
+                           step="0.1" placeholder="Введите длину"
+                           onchange="onFieldChange(${index}, 'length_per_piece_custom', this.value)"
+                           style="display: ${item.length_per_piece === 'custom' ? 'block' : 'none'};">
                 ` : `
                     <input type="number" class="table-input" value="${item.length_per_piece}" step="0.1" placeholder="6"
                            onchange="onFieldChange(${index}, 'length_per_piece', this.value)"
@@ -1832,6 +1836,34 @@
         }
     }
 
+    // ✅ Хелпер: получить фактическую длину штуки (учитывая н/д)
+    function getActualLengthPerPiece(item) {
+        if (item.length_per_piece === 'custom') {
+            // Для немерной длины - используем введённое значение
+            return parseFloat(item.length_per_piece_custom) || 6;
+        }
+        return parseFloat(item.length_per_piece) || 6;
+    }
+
+    // ✅ Обработчик изменения длины штуки (select)
+    function onLengthPerPieceChange(index, value) {
+        const item = state.items[index];
+        item.length_per_piece = value;
+
+        if (value === 'custom') {
+            // При выборе н/д - показываем input и не пересчитываем
+            // (пересчёт произойдёт когда пользователь введёт значение)
+            saveState();
+            renderTable();
+        } else {
+            // При выборе стандартной длины - сбрасываем custom и пересчитываем
+            item.length_per_piece_custom = '';
+            recalculateFromOriginalWeight(index);
+            saveState();
+            renderTable();
+        }
+    }
+
     function onFieldChange(index, field, value) {
         const item = state.items[index];
         item[field] = value;
@@ -1839,10 +1871,10 @@
         const config = getFieldsConfig(item.metal_key);
 
         // ✅ СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ИЗМЕНЕНИЯ РАЗМЕРОВ ШТУКИ/ЛИСТА
-        // При изменении length_per_piece (для линейных) или width/length_sheet (для листов)
+        // При изменении length_per_piece/length_per_piece_custom (для линейных) или width/length_sheet (для листов)
         // пересчитываем ОТ ИСХОДНОГО ВЕСА (original_weight)
         // Это гарантирует воспроизводимость результатов
-        if (field === 'length_per_piece' ||
+        if (field === 'length_per_piece' || field === 'length_per_piece_custom' ||
             (config.isSheet && (field === 'width' || field === 'length_sheet'))) {
             recalculateFromOriginalWeight(index);
             saveState();
@@ -1973,7 +2005,7 @@
 
             } else {
                 // ✅ ЛИНЕЙНЫЕ ТИПЫ: расчёт по длине
-                const lengthPerPiece = parseFloat(item.length_per_piece) || 6;
+                const lengthPerPiece = getActualLengthPerPiece(item);
 
                 // 1. Общая длина из исходного веса
                 const totalLength = originalWeight * 1000 / weightPerUnit; // м
@@ -2091,9 +2123,11 @@
         }
 
         // ✅ Используем длину штуки:
-        // 1. Если пользователь задал length_per_piece - используем его значение
+        // 1. Если пользователь задал length_per_piece (или custom) - используем его значение
         // 2. Иначе - стандартную длину (балки 12м, трубы 6м, арматура 11.7м)
-        const userLength = item.length_per_piece ? parseFloat(item.length_per_piece) : null;
+        const userLength = item.length_per_piece ?
+            (item.length_per_piece === 'custom' ? parseFloat(item.length_per_piece_custom) : parseFloat(item.length_per_piece))
+            : null;
         const standardLength = STANDARD_LENGTHS[item.metal_key]?.[0];
 
         if (userLength && userLength > 0) {
@@ -2148,7 +2182,7 @@
                         }
                         if (result.pieces !== null) {
                             // Пересчитываем штуки от скорректированной длины
-                            const lengthPerPiece = parseFloat(item.length_per_piece) || 6;
+                            const lengthPerPiece = getActualLengthPerPiece(item);
                             result.pieces = Math.round(result.length / lengthPerPiece);
                             result.length = result.pieces * lengthPerPiece;
                             // Пересчитываем вес от фактических штук
@@ -2450,9 +2484,11 @@
             console.log(`  🎯 Входной параметр: ${inputSource}`);
 
             // ✅ Используем длину штуки:
-            // 1. Если пользователь задал length_per_piece - используем его значение
+            // 1. Если пользователь задал length_per_piece (или custom) - используем его значение
             // 2. Иначе - стандартную длину (балки 12м, трубы 6м, арматура 11.7м)
-            const userLength = item.length_per_piece ? parseFloat(item.length_per_piece) : null;
+            const userLength = item.length_per_piece ?
+                (item.length_per_piece === 'custom' ? parseFloat(item.length_per_piece_custom) : parseFloat(item.length_per_piece))
+                : null;
             const standardLength = STANDARD_LENGTHS[item.metal_key]?.[0];
 
             if (userLength && userLength > 0) {
@@ -2961,7 +2997,9 @@
             // Добавляем длину штуки
             const config = getFieldsConfig(item.metal_key);
             if (item.length_per_piece) {
-                params.lengthSheet = parseFloat(item.length_per_piece);
+                params.lengthSheet = item.length_per_piece === 'custom'
+                    ? parseFloat(item.length_per_piece_custom) || 6
+                    : parseFloat(item.length_per_piece);
             }
 
             // Для листов - ширина и длина листа
@@ -3079,7 +3117,7 @@
                         weight: parseFloat(item.weight) || 0,
                         total_length: parseFloat(item.total_length) || parseFloat(item.length) || 0,
                         pieces: parseInt(item.pieces) || 0,
-                        length_per_piece: parseFloat(item.length_per_piece) || 0,
+                        length_per_piece: getActualLengthPerPiece(item),
 
                         // Для листов - ширина и длина листа
                         width: parseFloat(item.width) || null,
