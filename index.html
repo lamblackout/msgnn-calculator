@@ -783,7 +783,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.55</p>
+            <p>MSG Закупки v4.56</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -801,7 +801,7 @@
 
     // Проверка авторизации при загрузке
     function checkAuth() {
-        const isAuth = sessionStorage.getItem(AUTH_KEY) === 'true';
+        const isAuth = localStorage.getItem(AUTH_KEY) === 'true';
         const loginOverlay = document.getElementById('login-overlay');
         const appContent = document.getElementById('app-content');
         const logoutBtn = document.getElementById('logout-btn');
@@ -826,7 +826,7 @@
         const errorEl = document.getElementById('login-error');
 
         if (username === CREDENTIALS.login && password === CREDENTIALS.password) {
-            sessionStorage.setItem(AUTH_KEY, 'true');
+            localStorage.setItem(AUTH_KEY, 'true');
             errorEl.classList.remove('show');
             checkAuth();
         } else {
@@ -839,7 +839,7 @@
 
     // Обработка выхода
     function handleLogout() {
-        sessionStorage.removeItem(AUTH_KEY);
+        localStorage.removeItem(AUTH_KEY);
         checkAuth();
         document.getElementById('login-username').value = '';
         document.getElementById('login-password').value = '';
