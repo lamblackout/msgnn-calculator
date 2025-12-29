@@ -752,6 +752,16 @@
                 <span class="excel-hint">Откройте файл чтобы убедиться что всё верно</span>
             </div>
 
+            <!-- Комментарий менеджера -->
+            <div class="manager-comment-section" style="margin-bottom: 16px;">
+                <label for="manager-comment" style="display: block; font-weight: 500; margin-bottom: 6px; color: #374151;">
+                    💬 Комментарий менеджера:
+                </label>
+                <textarea id="manager-comment"
+                    placeholder="Добавьте комментарий к запросу (необязательно)..."
+                    style="width: 100%; min-height: 60px; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; resize: vertical; font-family: inherit;"></textarea>
+            </div>
+
             <!-- Кнопки отправки -->
             <div class="send-section">
                 <p class="send-label">Отправить запрос:</p>
@@ -783,7 +793,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.56</p>
+            <p>MSG Закупки v4.57</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -3253,6 +3263,9 @@
         const originalContent = btn.innerHTML;
         btn.innerHTML = `<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span> Отправка...`;
 
+        // Получаем комментарий менеджера
+        const managerComment = document.getElementById('manager-comment')?.value?.trim() || '';
+
         const payload = {
             category: category,
             category_name: categoryName,
@@ -3261,7 +3274,8 @@
             totals: window.currentSupplierRequest.totals,
             timestamp: new Date().toISOString(),
             excel_base64: window.currentExcelBase64 || null,
-            excel_filename: window.currentExcelFilename || null
+            excel_filename: window.currentExcelFilename || null,
+            manager_comment: managerComment
         };
 
         console.log(`📤 Отправка запроса поставщикам (${categoryName}):`, payload);
