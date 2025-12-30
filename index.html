@@ -793,7 +793,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.57</p>
+            <p>MSG Закупки v4.58</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -2816,22 +2816,14 @@
     // ФУНКЦИИ ЗАПРОСА ПОСТАВЩИКАМ
     // ============================================================
 
-    // Генерация уникального ID запроса
+    // Генерация уникального ID запроса (на основе timestamp для избежания конфликтов между устройствами)
     function generateRequestId() {
         const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        const dateStr = `${year}${month}${day}`;
-
-        // Получаем счётчик из localStorage для текущей даты
-        const counterKey = `supplier_request_counter_${dateStr}`;
-        let counter = parseInt(localStorage.getItem(counterKey) || '0') + 1;
-        localStorage.setItem(counterKey, counter.toString());
-
-        // Формат: ЗП-ГГГГММДД-XXX
-        const counterStr = String(counter).padStart(3, '0');
-        return `ЗП-${dateStr}-${counterStr}`;
+        const dateStr = now.toISOString().slice(0, 10).replace(/-/g, ''); // 20251230
+        const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, ''); // 143025 (ЧЧММсс)
+        const ms = String(now.getMilliseconds()).padStart(3, '0'); // 857
+        // Формат: ЗП-ГГГГММДД-ЧЧММссммм (например: ЗП-20251230-143025857)
+        return `ЗП-${dateStr}-${timeStr}${ms}`;
     }
 
     // Показать компактную карточку результата запроса
