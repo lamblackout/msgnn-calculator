@@ -793,7 +793,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.58</p>
+            <p>MSG Закупки v4.59</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -2898,11 +2898,12 @@
                 type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             });
 
-            // Создаём ссылку и скачиваем
+            // Создаём ссылку и скачиваем (совместимо с Яндекс Браузером)
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = window.currentExcelFilename || 'Запрос_поставщикам.xlsx';
+            a.style.display = 'none';  // Скрываем элемент
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -3692,10 +3693,12 @@
                 type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             });
 
+            // Создаём ссылку и скачиваем (совместимо с Яндекс Браузером)
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = data.excel_filename || `Сводка_${requestId}.xlsx`;
+            a.style.display = 'none';  // Скрываем элемент
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
