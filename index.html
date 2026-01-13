@@ -793,7 +793,7 @@
         </div>
 
         <footer class="text-center text-gray-500 text-sm mt-8">
-            <p>MSG Закупки v4.59</p>
+            <p>MSG Закупки v4.60</p>
         </footer>
     </div>
     </div><!-- /app-content -->
@@ -1990,8 +1990,8 @@
                 // 1. Общая площадь из исходного веса
                 const totalArea = originalWeight * 1000 / weightPerUnit; // м²
 
-                // 2. Количество листов (округление)
-                const pieces = Math.round(totalArea / areaPerSheet);
+                // 2. Количество листов (округление ВВЕРХ - всегда берём больше)
+                const pieces = Math.ceil(totalArea / areaPerSheet);
 
                 // 3. Фактическая площадь (кратна листам)
                 const actualArea = pieces * areaPerSheet;
@@ -2020,8 +2020,8 @@
                 // 1. Общая длина из исходного веса
                 const totalLength = originalWeight * 1000 / weightPerUnit; // м
 
-                // 2. Количество штук (округление)
-                const pieces = Math.round(totalLength / lengthPerPiece);
+                // 2. Количество штук (округление ВВЕРХ - всегда берём больше)
+                const pieces = Math.ceil(totalLength / lengthPerPiece);
 
                 // 3. Фактическая длина (кратна штукам)
                 const actualLength = pieces * lengthPerPiece;
@@ -2191,9 +2191,9 @@
                             result.length = Math.round(result.length / correctionFactor * 100) / 100;
                         }
                         if (result.pieces !== null) {
-                            // Пересчитываем штуки от скорректированной длины
+                            // Пересчитываем штуки от скорректированной длины (округление ВВЕРХ)
                             const lengthPerPiece = getActualLengthPerPiece(item);
-                            result.pieces = Math.round(result.length / lengthPerPiece);
+                            result.pieces = Math.ceil(result.length / lengthPerPiece);
                             result.length = result.pieces * lengthPerPiece;
                             // Пересчитываем вес от фактических штук
                             result.weight = Math.round(result.length * gostCoef / 1000 * 1000) / 1000;
