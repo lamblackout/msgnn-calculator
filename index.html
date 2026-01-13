@@ -935,6 +935,9 @@
     // Типы с выбором стандарта/варианта (профнастил, рельсы, лист ПВ, лист рифленый, лист окраш., лист оцинк.)
     const TYPES_WITH_STANDARDS = ['profnastil_okrash', 'profnastil_ocink', 'rels', 'sheet_pv', 'sheet_pv_galv', 'sheet_checkered', 'sheet_painted', 'sheet_galv'];
 
+    // Типы БЕЗ выбора марки стали (швеллер гнутый - коэффициенты уже включают плотность)
+    const TYPES_WITHOUT_STEEL = ['shveller_gnyt', 'shveller_gnyt_ocink'];
+
     // Стандартные длины для типов
     const STANDARD_LENGTHS = {
         'armature_a1': [6, 11.7], 'armature_a1_galv': [6, 11.7],
@@ -1220,6 +1223,7 @@
         const hasLengthPiece = TYPES_WITH_LENGTH_PIECE.includes(metalKey);
         const noPieces = TYPES_WITHOUT_PIECES.includes(metalKey);
         const hasStandards = TYPES_WITH_STANDARDS.includes(metalKey);
+        const noSteel = TYPES_WITHOUT_STEEL.includes(metalKey);
 
         return {
             showWeight: true,  // Вес всегда
@@ -1228,7 +1232,7 @@
             showLengthPiece: hasLengthPiece && !isSheet,  // Длина 1 шт
             showWidth: isSheet,  // Ширина листа
             showLengthSheet: isSheet,  // Длина листа
-            showSteel: !hasStandards,  // Марка стали (не для профнастила и рельсов)
+            showSteel: !hasStandards && !noSteel,  // Марка стали (не для профнастила, рельсов и швеллера гнутого)
             showStandard: hasStandards,  // Стандарт (для профнастила и рельсов)
             isSheet,
             isFastener
@@ -1735,10 +1739,12 @@
                             return standards.map(s => `<option value="${s.name}" ${s.name === item.standard ? 'selected' : ''}>${s.name}</option>`).join('');
                         })()}
                     </select>
-                ` : `
+                ` : config.showSteel ? `
                     <select class="table-select" onchange="onFieldChange(${index}, 'steel_grade', this.value)">
                         ${STEEL_GRADES.map(g => `<option value="${g.value}" ${g.value === item.steel_grade ? 'selected' : ''}>${g.name}</option>`).join('')}
                     </select>
+                ` : `
+                    <span class="text-gray-400">—</span>
                 `}
             </td>
 
