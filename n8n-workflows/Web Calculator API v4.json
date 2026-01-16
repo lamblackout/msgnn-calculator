@@ -1,0 +1,869 @@
+{
+  "name": "Web Calculator API v4",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "calc-parse",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "3b97ef95-4479-44ff-b7b2-2131a4cf0926",
+      "name": "Webhook: Parse",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2128,
+        -240
+      ],
+      "webhookId": "calc-parse-001",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "text-content",
+              "name": "text_content",
+              "value": "={{ $json.body.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d31598b2-c3db-4138-a4de-2e2cea2a59a7",
+      "name": "Set: Text Content",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1904,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "chatModel": "gpt-4.1-mini",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "Ты - AI парсер заявок на МЕТАЛЛОПРОКАТ. Твоя задача - извлечь структурированную информацию из заявки менеджера.\n\n**ОБЯЗАТЕЛЬНЫЙ JSON ФОРМАТ ОТВЕТА:**\n```json\n{\n  \"items\": [\n    {\n      \"name\": \"Труба электросварная 57x3.5\",\n      \"quantity\": 100,\n      \"unit\": \"м\",\n      \"gost\": \"ГОСТ 10704-91\",\n      \"pieces\": null,\n      \"length_per_piece\": null,\n      \"width\": null,\n      \"length_sheet\": null,\n      \"steel_grade\": null\n    }\n  ]\n}\n```\n\n**ПРАВИЛА:**\n1. Количество в тоннах (т, тн) → quantity + unit=\"тн\"\n2. Количество в метрах (м, м.п., М/п, м/п, пог.м) → quantity + unit=\"м\"\n3. Штуки (шт, Шт.) → pieces (число) + unit=\"шт\"\n4. Длина 1 штуки → length_per_piece\n5. Размеры листов → width, length_sheet (в метрах)\n6. Марка стали → steel_grade\n7. NULL для отсутствующих полей\n8. Ответ ТОЛЬКО JSON без markdown\n\n**⚠️ КРИТИЧЕСКИ ВАЖНО - РАСПОЗНАВАНИЕ КОЛОНОК В ТАБЛИЦАХ:**\n- Колонка \"М/п\" = МЕТРЫ погонные → quantity (число как есть) + unit=\"м\"\n- Колонка \"Шт.\" = ШТУКИ → pieces (число как есть) + unit=\"шт\"\n- НЕ ПЕРЕСЧИТЫВАЙ числа! Бери значения из таблицы КАК ЕСТЬ\n- Для БАЛОК, ДВУТАВРОВ, ШВЕЛЛЕРОВ, ТРУБ → колонка М/п = МЕТРЫ\n- Для ЛИСТОВ → колонка Шт. = ШТУКИ\n\n**ПРИМЕРЫ ПРАВИЛЬНОГО ПАРСИНГА:**\n- \"Двутавр 30Б2, М/п: 204\" → quantity: 204, unit: \"м\" (НЕ тонны!)\n- \"Труба 200х100х5, М/п: 12\" → quantity: 12, unit: \"м\"\n- \"Лист 8, Шт.: 1\" → pieces: 1, unit: \"шт\"\n- \"Лист 30, Шт.: пол.листа\" → pieces: 0.5, unit: \"шт\"\n\n**СОКРАЩЕНИЯ:** х/к=холоднокатаный, г/к=горячекатаный, э/с=электросварная, б/ш=бесшовная, оц=оцинкованная, вгп=водогазопроводная, проф=профильная\n\nРаспарси заявку:"
+            },
+            {
+              "content": "={{ $json.text_content }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 4000,
+          "temperature": 0.1
+        },
+        "requestOptions": {}
+      },
+      "id": "02b43ac2-6188-4fa3-a165-0eecdce62d56",
+      "name": "OpenAI: Parse Order",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.1,
+      "position": [
+        -1680,
+        -240
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "openAiApi": {
+          "id": "ZNb2GdFIiM7vrhFZ",
+          "name": "OpenAi account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Code: Process Parse Result v4\n// ИЗМЕНЕНО: Формирует parsed_data для Validate Order Fields\n// ============================================================\n\nconst aiMessage = $input.first().json;\nlet parsedData;\nlet success = true;\nlet error = null;\n\ntry {\n  let jsonText = aiMessage.message?.content || aiMessage.content || '';\n  jsonText = jsonText.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  parsedData = JSON.parse(jsonText);\n  \n  if (!parsedData.items || !Array.isArray(parsedData.items)) {\n    throw new Error('Invalid AI response: missing items array');\n  }\n  \n  // Нормализуем items с полем name (нужно для Validate Order Fields)\n  parsedData.items = parsedData.items.map((item, i) => ({\n    index: i + 1,\n    name: item.name,  // ← ВАЖНО: Validate ищет по name\n    raw_text: item.name,\n    quantity: item.quantity || item.pieces,\n    unit: item.unit || (item.pieces ? 'шт' : 'м'),\n    pieces: item.pieces,\n    length_per_piece: item.length_per_piece,\n    width: item.width,\n    length_sheet: item.length_sheet,\n    steel_grade: item.steel_grade,\n    gost: item.gost\n  }));\n  \n} catch (e) {\n  success = false;\n  error = e.message;\n  parsedData = { items: [] };\n}\n\n// Формат для Validate Order Fields:\n// { parsed_data: { items: [...] } }\nreturn [{ \n  json: { \n    _sourceType: 'text',\n    _parseSuccess: success,\n    _parseError: error,\n    parsed_data: {\n      items: parsedData.items\n    }\n  } \n}];"
+      },
+      "id": "7c54ac4e-19df-4e22-bbc7-1d1f417f7fda",
+      "name": "Code: Process Parse Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1456,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "calc-parse-file",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "2f4dbdc1-f9aa-4318-b515-24364538c906",
+      "name": "Webhook: Parse File",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2128,
+        -704
+      ],
+      "webhookId": "calc-parse-file-001",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Определяем тип файла из binary данных\nconst item = $input.first();\nconst binary = item.binary || {};\nconst json = item.json || {};\n\n// Ищем файл в binary (может быть под разными ключами: data, file, file0 и т.д.)\nlet fileData = null;\nlet mimeType = null;\nlet fileName = null;\nlet binaryKey = null;\n\nfor (const key of Object.keys(binary)) {\n  if (binary[key]) {\n    fileData = binary[key];\n    mimeType = fileData.mimeType || '';\n    fileName = fileData.fileName || '';\n    binaryKey = key;\n    break;\n  }\n}\n\n// Определяем тип файла по mimeType\nlet fileType = 'unknown';\n\nif (mimeType) {\n  if (mimeType.includes('pdf')) {\n    fileType = 'pdf';\n  } else if (mimeType.includes('spreadsheet') || mimeType.includes('excel') || mimeType.includes('xlsx') || mimeType.includes('xls') || mimeType.includes('openxmlformats-officedocument.spreadsheetml')) {\n    fileType = 'xlsx';\n  } else if (mimeType.includes('image')) {\n    fileType = 'image';\n  } else if (mimeType.includes('text/plain')) {\n    fileType = 'text';\n  }\n}\n\n// Если mimeType не определён, смотрим на расширение файла\nif (fileType === 'unknown' && fileName) {\n  const ext = fileName.split('.').pop()?.toLowerCase();\n  if (ext === 'pdf') fileType = 'pdf';\n  else if (['xlsx', 'xls'].includes(ext)) fileType = 'xlsx';\n  else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext)) fileType = 'image';\n  else if (['txt', 'csv'].includes(ext)) fileType = 'text';\n}\n\nreturn [{ \n  json: { \n    ...json,\n    _fileType: fileType,\n    _mimeType: mimeType,\n    _fileName: fileName,\n    _binaryKey: binaryKey,\n    _debug: {\n      binaryKeys: Object.keys(binary),\n      hasBinary: Object.keys(binary).length > 0\n    }\n  },\n  binary: binary\n}];"
+      },
+      "id": "c5c6c1f3-368d-4365-bfa9-9e756a2f5a99",
+      "name": "Code: Detect File Type",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1904,
+        -704
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._fileType }}",
+                    "rightValue": "pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PDF"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._fileType }}",
+                    "rightValue": "xlsx",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "XLSX"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._fileType }}",
+                    "rightValue": "image",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Image"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "5fa5a148-9629-410c-a9f4-7539fe22bfad",
+      "name": "Switch: File Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -1680,
+        -736
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "={{ $json._binaryKey || 'data' }}",
+        "options": {}
+      },
+      "id": "4694b05e-d566-4d82-bd7c-16e9bb4e7d69",
+      "name": "Extract: PDF",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1456,
+        -960
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "file",
+        "options": {}
+      },
+      "id": "ddd00642-ec1e-44c9-848c-484bff455bfd",
+      "name": "Extract: XLSX",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1456,
+        -800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Code: Combine Text v4.4 (FIXED markdown wrapper)\n// Собирает текст из разных источников (PDF, XLSX, Vision)\n// ============================================================\nconst items = $input.all();\nlet text = '';\nlet sourceType = 'unknown';\nlet debugInfo = [];\n\nif (items.length === 0) {\n  return [{ json: { text_content: '', _sourceType: 'empty', _debug: ['No input items'] } }];\n}\n\nlet firstItem = items[0].json;\n\n// Развернуть вложенный массив (Vision иногда возвращает [[{...}]])\nif (Array.isArray(firstItem) && firstItem.length > 0) {\n  firstItem = firstItem[0];\n  debugInfo.push('Unwrapped nested array');\n}\n\nconst firstItemKeys = Object.keys(firstItem);\ndebugInfo.push(`First item keys: ${firstItemKeys.join(', ')}`);\n\n// 1. Vision (OpenAI/Claude) - content массив с output_text\nif (Array.isArray(firstItem.content) && firstItem.content[0]?.text) {\n  text = firstItem.content[0].text;\n  sourceType = 'image';\n  debugInfo.push('Vision response (content[0].text)');\n}\n// 2. Vision альтернативный формат - message.content\nelse if (firstItem.message?.content) {\n  text = firstItem.message.content;\n  sourceType = 'image';\n  debugInfo.push('Vision response (message.content)');\n}\n// 3. PDF - обычно имеет поле text\nelse if (firstItem.text && typeof firstItem.text === 'string' && firstItem.text.length > 10) {\n  text = firstItem.text;\n  sourceType = 'pdf';\n  debugInfo.push('PDF text extracted');\n}\n// 4. XLSX - множество items с табличными данными\nelse if (items.length > 1 || \n         firstItem.row !== undefined || \n         firstItem['A'] !== undefined || \n         firstItemKeys.some(k => !k.startsWith('_') && k !== 'binary' && k !== 'pairedItem')) {\n  \n  const hasTableData = items.length > 1 || \n                       firstItemKeys.some(k => /^[A-Z]$/.test(k)) ||\n                       firstItemKeys.some(k => !k.startsWith('_') && typeof firstItem[k] !== 'object');\n  \n  if (hasTableData) {\n    sourceType = 'xlsx';\n    debugInfo.push('XLSX detected');\n    debugInfo.push(`Columns: ${firstItemKeys.filter(k => !k.startsWith('_')).join(', ')}`);\n    \n    const rows = items.map(item => {\n      const rowData = item.json;\n      return Object.entries(rowData)\n        .filter(([key, value]) => value !== undefined && value !== null && value !== '' && (!key.startsWith('_') || key.startsWith('__')))\n        .map(([key, value]) => `${key}: ${String(value)}`)\n        .join(' | ');\n    }).filter(row => row.trim());\n    \n    text = rows.join('\\n');\n    debugInfo.push(`Rows combined: ${rows.length}`);\n  }\n}\n// 5. Direct content string\nelse if (typeof firstItem.content === 'string') {\n  text = firstItem.content;\n  sourceType = 'text';\n  debugInfo.push('Direct content string');\n}\n// 6. Fallback - body.text\nelse if (firstItem.body?.text) {\n  text = firstItem.body.text;\n  sourceType = 'text';\n  debugInfo.push('Body text fallback');\n}\n\n// ✅ НОВОЕ: Убираем markdown-обёртку ```json ... ``` (Vision иногда добавляет)\nif (text) {\n  const originalLength = text.length;\n  text = text.replace(/^```json\\s*\\n?/i, '').replace(/\\n?```\\s*$/i, '').trim();\n  if (text.length !== originalLength) {\n    debugInfo.push('Removed markdown wrapper');\n  }\n}\n\nif (!text) {\n  debugInfo.push('WARNING: No text extracted!');\n  debugInfo.push(`Structure: ${JSON.stringify(firstItem).substring(0, 300)}`);\n}\n\nreturn [{ \n  json: { \n    text_content: text,\n    _sourceType: sourceType,\n    _debug: debugInfo,\n    _itemsCount: items.length\n  } \n}];"
+      },
+      "id": "dfe0a132-8b48-4d45-a913-ee47396ed87d",
+      "name": "Code: Combine Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1232,
+        -800
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "chatModel": "gpt-4.1-mini",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "Ты - AI парсер заявок на МЕТАЛЛОПРОКАТ. Твоя задача - извлечь структурированную информацию из заявки менеджера.\n\n**ОБЯЗАТЕЛЬНЫЙ JSON ФОРМАТ ОТВЕТА:**\n```json\n{\n  \"items\": [\n    {\n      \"name\": \"Труба электросварная 57x3.5\",\n      \"quantity\": 100,\n      \"unit\": \"м\",\n      \"gost\": \"ГОСТ 10704-91\",\n      \"pieces\": null,\n      \"length_per_piece\": null,\n      \"width\": null,\n      \"length_sheet\": null,\n      \"steel_grade\": null\n    }\n  ]\n}\n```\n\n**ПРАВИЛА:**\n1. Количество в тоннах (т, тн) → quantity + unit=\"тн\"\n2. Количество в КИЛОГРАММАХ (кг, КГ, килограмм) → РАЗДЕЛИ НА 1000 → quantity + unit=\"тн\"\n3. Количество в метрах (м, м.п., М/п, м/п, пог.м) → quantity + unit=\"м\"\n4. Штуки (шт, Шт.) → pieces (число) + unit=\"шт\"\n5. Длина 1 штуки → length_per_piece\n6. Размеры листов → width, length_sheet (в метрах)\n7. Марка стали → steel_grade\n8. NULL для отсутствующих полей\n9. Ответ ТОЛЬКО JSON без markdown\n\n**⚠️ КРИТИЧЕСКИ ВАЖНО - РАСПОЗНАВАНИЕ КОЛОНОК В ТАБЛИЦАХ:**\n- Колонка \"М/п\" = МЕТРЫ погонные → quantity (число как есть) + unit=\"м\"\n- Колонка \"Шт.\" = ШТУКИ → pieces (число как есть) + unit=\"шт\"\n- Колонка \"кг\" или \"КГ\" = КИЛОГРАММЫ → РАЗДЕЛИ НА 1000 → quantity + unit=\"тн\"\n- НЕ ПЕРЕСЧИТЫВАЙ числа! Бери значения из таблицы КАК ЕСТЬ (кроме кг→тн)\n- Для БАЛОК, ДВУТАВРОВ, ШВЕЛЛЕРОВ, ТРУБ → колонка М/п = МЕТРЫ\n- Для ЛИСТОВ → колонка Шт. = ШТУКИ\n\n**ПРИМЕРЫ ПРАВИЛЬНОГО ПАРСИНГА:**\n- \"Двутавр 30Б2, М/п: 204\" → quantity: 204, unit: \"м\" (НЕ тонны!)\n- \"Труба 200х100х5, М/п: 12\" → quantity: 12, unit: \"м\"\n- \"Лист 8, Шт.: 1\" → pieces: 1, unit: \"шт\"\n- \"Лист 30, Шт.: пол.листа\" → pieces: 0.5, unit: \"шт\"\n- \"Швеллер 20П, кг: 1288.78\" → quantity: 1.289, unit: \"тн\" (1288.78 / 1000)\n- \"Уголок 100х10, кг: 872.97\" → quantity: 0.873, unit: \"тн\" (872.97 / 1000)\n\n**СОКРАЩЕНИЯ:** х/к=холоднокатаный, г/к=горячекатаный, э/с=электросварная, б/ш=бесшовная, оц=оцинкованная, вгп=водогазопроводная, проф=профильная\n\nРаспарси заявку:"
+            },
+            {
+              "content": "={{ $json.text_content }}"
+            }
+          ]
+        },
+        "options": {},
+        "requestOptions": {}
+      },
+      "id": "29a2d083-07cc-48eb-844a-8457ab1b5f1d",
+      "name": "OpenAI: Parse File Content",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.1,
+      "position": [
+        -1024,
+        -800
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "openAiApi": {
+          "id": "ZNb2GdFIiM7vrhFZ",
+          "name": "OpenAi account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Code: Process File Parse v4\n// ИЗМЕНЕНО: Формирует parsed_data для Validate Order Fields\n// ============================================================\n\nconst aiMessage = $input.first().json;\nconst combineData = $('Code: Combine Text').first().json;\n\nlet parsedData;\nlet success = true;\nlet error = null;\n\ntry {\n  let jsonText = aiMessage.message?.content || aiMessage.content || '';\n  jsonText = jsonText.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  parsedData = JSON.parse(jsonText);\n  \n  if (!parsedData.items || !Array.isArray(parsedData.items)) {\n    throw new Error('Invalid AI response: missing items array');\n  }\n  \n  // Нормализуем items с полем name (нужно для Validate Order Fields)\n  parsedData.items = parsedData.items.map((item, i) => ({\n    index: i + 1,\n    name: item.name,  // ← ВАЖНО: Validate ищет по name\n    raw_text: item.name,\n    quantity: item.quantity || item.pieces,\n    unit: item.unit || (item.pieces ? 'шт' : 'м'),\n    pieces: item.pieces,\n    length_per_piece: item.length_per_piece,\n    width: item.width,\n    length_sheet: item.length_sheet,\n    steel_grade: item.steel_grade,\n    gost: item.gost\n  }));\n  \n} catch (e) {\n  success = false;\n  error = e.message;\n  parsedData = { items: [] };\n}\n\n// Формат для Validate Order Fields:\n// { parsed_data: { items: [...] } }\nreturn [{ \n  json: { \n    _sourceType: combineData._sourceType,\n    _parseSuccess: success,\n    _parseError: error,\n    _debug: combineData._debug,\n    parsed_data: {\n      items: parsedData.items\n    }\n  } \n}];"
+      },
+      "id": "dcb56680-d97a-45d5-b401-db6b25401790",
+      "name": "Code: Process File Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -800,
+        -800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// CODE: Validate Order Fields V3.1\n// ИСПРАВЛЕНО: Правильный парсинг листов (толщина + раскрой)\n// ============================================================\n\nconst inputData = $input.first().json;\nconst parsedData = inputData.parsed_data;\n\n// === SUPABASE CONFIG ===\nconst SUPABASE_URL = 'https://neeejfmscjetprxjscto.supabase.co';\nconst SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lZWVqZm1zY2pldHByeGpzY3RvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA3NTAyNTYsImV4cCI6MjA3NjMyNjI1Nn0.wHOtFj_pFGPEzDt2RMQr_zHfg10i9msvSi79tQCjnvU';\n\n// === DEBUG INFO ===\nconst debug = {\n  version: 'v3.1',\n  timestamp: new Date().toISOString(),\n  metalTypesLoaded: false,\n  metalTypesCount: 0,\n  errors: [],\n  warnings: [],\n  itemsProcessed: 0,\n  itemsValidated: 0\n};\n\nconsole.log('🚀 Validate Order Fields v3.1 started');\n\n// ============================================================\n// СТАНДАРТНЫЕ РАСКРОИ ЛИСТОВ (ширина × длина в мм)\n// ============================================================\nconst STANDARD_SHEET_CUTS = [\n  { width: 1000, length: 2000 },\n  { width: 1250, length: 2500 },\n  { width: 1500, length: 3000 },\n  { width: 1500, length: 6000 },\n  { width: 2000, length: 6000 },\n  // В метрах (для парсинга 1.25×2.5)\n  { width: 1, length: 2 },\n  { width: 1.25, length: 2.5 },\n  { width: 1.5, length: 3 },\n  { width: 1.5, length: 6 },\n];\n\n// ============================================================\n// 1. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ\n// ============================================================\n\n/**\n * Нормализация размера для поиска в БД\n */\nfunction normalizeSize(size) {\n  if (!size) return '';\n  return String(size)\n    .toLowerCase()\n    .replace(/[×xXхХ\\*]/g, 'х')\n    .replace(/,/g, '.')\n    .replace(/\\s+/g, '')\n    .replace(/мм|mm/gi, '')\n    .trim();\n}\n\n/**\n * Извлечение всех чисел из строки\n */\nfunction extractNumbers(text) {\n  if (!text) return [];\n  const regex = /\\d+(?:[.,]\\d+)?/g;\n  const matches = text.match(regex);\n  if (!matches) return [];\n  return matches.map(m => parseFloat(m.replace(',', '.')));\n}\n\n/**\n * Проверка: является ли пара чисел стандартным раскроем листа\n * @returns {object|null} { width, length } в метрах или null\n */\nfunction isSheetCut(num1, num2) {\n  // Сортируем: меньшее = ширина, большее = длина\n  const w = Math.min(num1, num2);\n  const l = Math.max(num1, num2);\n  \n  for (const cut of STANDARD_SHEET_CUTS) {\n    // Проверяем в мм\n    if ((w === cut.width && l === cut.length) || \n        (Math.abs(w - cut.width) < 1 && Math.abs(l - cut.length) < 1)) {\n      // Возвращаем в метрах\n      return {\n        width: cut.width >= 100 ? cut.width / 1000 : cut.width,\n        length: cut.length >= 100 ? cut.length / 1000 : cut.length\n      };\n    }\n    // Проверяем в метрах (1.25×2.5)\n    if (Math.abs(w - cut.width) < 0.01 && Math.abs(l - cut.length) < 0.01) {\n      return { width: w, length: l };\n    }\n  }\n  \n  // Эвристика: если оба числа > 100, это похоже на раскрой в мм\n  if (w >= 100 && l >= 100 && w <= 3000 && l <= 12000) {\n    return { width: w / 1000, length: l / 1000 };\n  }\n  \n  // Эвристика: если оба числа < 10 и похожи на метры (1.25, 2.5)\n  if (w > 0.5 && w < 5 && l > 1 && l < 15) {\n    return { width: w, length: l };\n  }\n  \n  return null;\n}\n\n/**\n * Извлечение размера И раскроя для ЛИСТОВ\n * @returns { size: string, width: number, lengthSheet: number }\n */\nfunction extractSheetParams(itemName) {\n  const numbers = extractNumbers(itemName);\n  \n  if (numbers.length === 0) {\n    return { size: null, width: null, lengthSheet: null };\n  }\n  \n  // Ищем паттерн AxB (раскрой)\n  const cutMatch = itemName.match(/(\\d+(?:[.,]\\d+)?)\\s*[×xXхХ\\*]\\s*(\\d+(?:[.,]\\d+)?)/i);\n  \n  let thickness = null;\n  let width = null;\n  let lengthSheet = null;\n  \n  if (cutMatch) {\n    // Есть раскрой\n    const cutNum1 = parseFloat(cutMatch[1].replace(',', '.'));\n    const cutNum2 = parseFloat(cutMatch[2].replace(',', '.'));\n    \n    const sheetCut = isSheetCut(cutNum1, cutNum2);\n    \n    if (sheetCut) {\n      // Это действительно раскрой\n      width = sheetCut.width;\n      lengthSheet = sheetCut.length;\n      \n      // Толщина = другое число в строке (не часть раскроя)\n      for (const num of numbers) {\n        // Число не является частью раскроя\n        if (Math.abs(num - cutNum1) > 0.01 && Math.abs(num - cutNum2) > 0.01) {\n          // Толщина обычно 0.3 - 200 мм\n          if (num >= 0.3 && num <= 200) {\n            thickness = num;\n            break;\n          }\n        }\n      }\n    } else {\n      // Два числа через × но это НЕ стандартный раскрой\n      // Скорее всего это что-то вроде \"8×1250\" - ошибка ввода\n      // Берём первое одиночное число как толщину\n      for (const num of numbers) {\n        if (num >= 0.3 && num <= 200) {\n          thickness = num;\n          break;\n        }\n      }\n    }\n  } else {\n    // Нет паттерна A×B, просто числа\n    // Первое подходящее число = толщина\n    for (const num of numbers) {\n      if (num >= 0.3 && num <= 200) {\n        thickness = num;\n        break;\n      }\n    }\n  }\n  \n  return {\n    size: thickness !== null ? String(thickness) : null,\n    width: width,\n    lengthSheet: lengthSheet\n  };\n}\n\n/**\n * Извлечение размера из названия позиции\n * Поддерживает форматы: 57×3.5, 80x80x3, ⌀219, d159, №20, 20К1 и т.д.\n */\nfunction extractSizeFromName(itemName, metalKey, category) {\n  if (!itemName) return null;\n  \n  const name = itemName.toLowerCase();\n  \n  // ═══════════════════════════════════════════════════════════\n  // СПЕЦИАЛЬНАЯ ОБРАБОТКА ДЛЯ ЛИСТОВ\n  // ═══════════════════════════════════════════════════════════\n  if (category === 'sheet' || (metalKey && metalKey.includes('sheet'))) {\n    const sheetParams = extractSheetParams(itemName);\n    // Возвращаем только толщину как размер\n    // width и lengthSheet добавляются отдельно в item\n    return sheetParams.size;\n  }\n  \n  // === СПЕЦИАЛЬНЫЕ ПАТТЕРНЫ ===\n  \n  // 1. Балки и швеллеры: номер + серия (20К1, 10Б1, 16П, 24У)\n  if (metalKey && (metalKey.includes('beam') || metalKey.includes('shveller'))) {\n    const beamMatch = itemName.match(/(\\d+)\\s*([А-Яа-яA-Za-z]+\\d*)/);\n    if (beamMatch) {\n      return beamMatch[1] + beamMatch[2];\n    }\n    const numMatch = itemName.match(/№?\\s*(\\d+)/);\n    if (numMatch) {\n      return numMatch[1];\n    }\n  }\n  \n  // 2. Трубы с 3 размерами: 80×80×3 или 100х40х2\n  const pipe3Match = itemName.match(/(\\d+(?:[.,]\\d+)?)\\s*[×xXхХ\\*]\\s*(\\d+(?:[.,]\\d+)?)\\s*[×xXхХ\\*]\\s*(\\d+(?:[.,]\\d+)?)/i);\n  if (pipe3Match) {\n    const a = pipe3Match[1].replace(',', '.');\n    const b = pipe3Match[2].replace(',', '.');\n    const c = pipe3Match[3].replace(',', '.');\n    return `${a}х${b}х${c}`;\n  }\n  \n  // 3. Трубы с 2 размерами: 57×3.5 или 159х4.5\n  const pipe2Match = itemName.match(/(\\d+(?:[.,]\\d+)?)\\s*[×xXхХ\\*]\\s*(\\d+(?:[.,]\\d+)?)/i);\n  if (pipe2Match) {\n    const d = parseFloat(pipe2Match[1].replace(',', '.'));\n    const s = parseFloat(pipe2Match[2].replace(',', '.'));\n    \n    // ✅ КВАДРАТНЫЕ ТРУБЫ: 80×3 → 80×80×3\n    // Если metalKey содержит \"kvadr\" и второе число явно меньше первого (толщина стенки)\n    // то это сокращённый формат: сторона × толщина\n    if (metalKey && metalKey.includes('kvadr') && s < d && s <= 12) {\n      // Разворачиваем: 80×3 → 80×80×3\n      return `${d}х${d}х${s}`;\n    }\n    \n    // Для остальных (круглые трубы и т.д.): оставляем как есть\n    return `${d}х${s}`;\n  }\n  \n  // 4. Диаметр: ⌀219, Ø159, d57\n  const diamMatch = itemName.match(/[⌀Øø]\\s*(\\d+(?:[.,]\\d+)?)/);\n  if (diamMatch) {\n    return diamMatch[1].replace(',', '.');\n  }\n  const dMatch = itemName.match(/\\bd\\s*(\\d+(?:[.,]\\d+)?)/i);\n  if (dMatch) {\n    return dMatch[1].replace(',', '.');\n  }\n  \n  // 5. Арматура, круг, проволока: просто диаметр (12, 16, 25)\n  if (category === 'wire' || (metalKey && (metalKey.includes('armature') || metalKey.includes('circle') || metalKey.includes('wire') || metalKey.includes('katanka')))) {\n    const numbers = extractNumbers(itemName);\n    for (const num of numbers) {\n      if (num > 0 && num < 100) {\n        return String(num);\n      }\n    }\n  }\n  \n  // 6. Общий fallback: первые числа через ×\n  const numbers = extractNumbers(itemName);\n  if (numbers.length >= 3) {\n    return `${numbers[0]}х${numbers[1]}х${numbers[2]}`;\n  } else if (numbers.length === 2) {\n    return `${numbers[0]}х${numbers[1]}`;\n  } else if (numbers.length === 1) {\n    return String(numbers[0]);\n  }\n  \n  return null;\n}\n\n/**\n * Извлечение раскроя листа (ширина и длина)\n * Вызывается отдельно после extractSizeFromName\n */\nfunction extractSheetCut(itemName, metalKey, category) {\n  if (category !== 'sheet' && !(metalKey && metalKey.includes('sheet'))) {\n    return { width: null, lengthSheet: null };\n  }\n  \n  const sheetParams = extractSheetParams(itemName);\n  return {\n    width: sheetParams.width,\n    lengthSheet: sheetParams.lengthSheet\n  };\n}\n\n/**\n * Поиск типа металла по aliases (улучшенная версия)\n */\nfunction findMetalType(itemName, metalTypes) {\n  if (!itemName || !metalTypes || metalTypes.length === 0) return null;\n  \n  const nameLower = itemName.toLowerCase().trim();\n  \n  let bestMatch = null;\n  let bestScore = 0;\n  \n  for (const metalType of metalTypes) {\n    let aliases = metalType.aliases || [];\n    \n    if (typeof aliases === 'string') {\n      try {\n        const cleaned = aliases.replace(/^\"\\{/, '[').replace(/\\}\"$/, ']').replace(/\\\\\"/g, '\"');\n        aliases = JSON.parse(cleaned);\n      } catch (e) {\n        try {\n          aliases = JSON.parse(aliases);\n        } catch (e2) {\n          aliases = [];\n        }\n      }\n    }\n    \n    for (const alias of aliases) {\n      if (!alias) continue;\n      const aliasLower = alias.toLowerCase().trim();\n      \n      if (nameLower.includes(aliasLower)) {\n        const score = aliasLower.length * 2;\n        if (score > bestScore) {\n          bestScore = score;\n          bestMatch = metalType;\n        }\n      }\n      \n      if (aliasLower.includes(nameLower) && nameLower.length >= 3) {\n        const score = nameLower.length;\n        if (score > bestScore) {\n          bestScore = score;\n          bestMatch = metalType;\n        }\n      }\n    }\n  }\n  \n  return bestMatch;\n}\n\n/**\n * Fuzzy matching размеров\n */\nfunction fuzzyMatchSize(targetDims, metalSizes, tolerance = 0.05) {\n  if (!targetDims || targetDims.length === 0 || !metalSizes || metalSizes.length === 0) {\n    return null;\n  }\n  \n  let bestMatch = null;\n  let bestDistance = Infinity;\n  \n  for (const sizeRecord of metalSizes) {\n    const dbDims = [\n      sizeRecord.dimension_1,\n      sizeRecord.dimension_2,\n      sizeRecord.dimension_3\n    ].filter(d => d !== null && d !== undefined);\n    \n    // Для листов: сравниваем только по первому измерению (толщине)\n    if (sizeRecord.category === 'sheet') {\n      if (targetDims.length >= 1 && dbDims.length >= 1) {\n        const diff = Math.abs(targetDims[0] - dbDims[0]);\n        const maxVal = Math.max(targetDims[0], dbDims[0]);\n        \n        if (maxVal === 0 || diff / maxVal <= tolerance) {\n          if (diff < bestDistance) {\n            bestDistance = diff;\n            bestMatch = sizeRecord;\n          }\n        }\n      }\n    } else {\n      if (dbDims.length !== targetDims.length) continue;\n      \n      let distance = 0;\n      let withinTolerance = true;\n      \n      for (let i = 0; i < targetDims.length; i++) {\n        const diff = Math.abs(targetDims[i] - dbDims[i]);\n        const maxVal = Math.max(targetDims[i], dbDims[i]);\n        \n        if (maxVal > 0 && diff / maxVal > tolerance) {\n          withinTolerance = false;\n          break;\n        }\n        \n        distance += diff * diff;\n      }\n      \n      if (withinTolerance) {\n        distance = Math.sqrt(distance);\n        if (distance < bestDistance) {\n          bestDistance = distance;\n          bestMatch = sizeRecord;\n        }\n      }\n    }\n  }\n  \n  return bestMatch;\n}\n\n// ============================================================\n// 2. ЗАГРУЗКА СПРАВОЧНИКОВ\n// ============================================================\n\nlet metalTypes = [];\n\ntry {\n  console.log('📥 Loading metal_types...');\n  \n  const typesResponse = await this.helpers.httpRequest({\n    method: 'GET',\n    url: `${SUPABASE_URL}/rest/v1/metal_types?select=*`,\n    headers: {\n      'apikey': SUPABASE_ANON_KEY,\n      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,\n      'Content-Type': 'application/json'\n    },\n    json: true\n  });\n  \n  if (Array.isArray(typesResponse)) {\n    metalTypes = typesResponse;\n    debug.metalTypesLoaded = true;\n    debug.metalTypesCount = metalTypes.length;\n    console.log(`✅ metal_types loaded: ${metalTypes.length} records`);\n  } else {\n    throw new Error('metal_types response is not an array');\n  }\n} catch (error) {\n  debug.errors.push(`metal_types load error: ${error.message}`);\n  console.error('❌ metal_types load error:', error.message);\n}\n\nif (metalTypes.length === 0) {\n  return [{\n    json: {\n      success: false,\n      error: 'CRITICAL: metal_types not loaded',\n      items: [],\n      _debug: debug\n    }\n  }];\n}\n\n// ============================================================\n// 3. ВАЛИДАЦИЯ КАЖДОЙ ПОЗИЦИИ\n// ============================================================\n\nconst validatedItems = [];\n\nif (!parsedData || !parsedData.items || !Array.isArray(parsedData.items)) {\n  debug.errors.push('parsed_data.items is missing or not an array');\n  return [{\n    json: {\n      success: false,\n      error: 'No items to validate',\n      items: [],\n      _debug: debug\n    }\n  }];\n}\n\nconsole.log(`📋 Validating ${parsedData.items.length} items...`);\n\nfor (const item of parsedData.items) {\n  debug.itemsProcessed++;\n  \n  const itemDebug = {\n    original_name: item.name,\n    steps: []\n  };\n  \n  // ─────────────────────────────────────────────\n  // 3.1. ПОИСК ТИПА МЕТАЛЛА\n  // ─────────────────────────────────────────────\n  \n  const metalType = findMetalType(item.name, metalTypes);\n  \n  if (!metalType) {\n    itemDebug.steps.push('❌ Metal type not found');\n    validatedItems.push({\n      ...item,\n      metal_key: null,\n      metal_name: item.name,\n      _validation_passed: false,\n      _validation_error: 'Тип металла не найден в справочнике'\n    });\n    debug.warnings.push(`Metal type not found for: \"${item.name}\"`);\n    continue;\n  }\n  \n  item.metal_key = metalType.metal_key;  // ← КЛЮЧЕВОЕ ПОЛЕ!\n  item.metal_name = metalType.metal_name;\n  item._metalKey = metalType.metal_key;\n  item._metalName = metalType.metal_name;\n  item._category = metalType.category;\n  itemDebug.steps.push(`✅ Metal: ${metalType.metal_name} (${metalType.metal_key})`);\n  \n  // ─────────────────────────────────────────────\n  // 3.2. ИЗВЛЕЧЕНИЕ РАЗМЕРА ИЗ НАЗВАНИЯ\n  // ─────────────────────────────────────────────\n  \n  const extractedSize = extractSizeFromName(item.name, metalType.metal_key, metalType.category);\n  \n  // ═══════════════════════════════════════════════════════════\n  // 3.2.1. ДЛЯ ЛИСТОВ: Извлечение раскроя (ширина × длина)\n  // ═══════════════════════════════════════════════════════════\n  if (metalType.category === 'sheet' || metalType.metal_key.includes('sheet')) {\n    const sheetCut = extractSheetCut(item.name, metalType.metal_key, metalType.category);\n    \n    if (sheetCut.width !== null) {\n      item.width = sheetCut.width;\n      item._widthFromParsing = true;\n      itemDebug.steps.push(`📐 Sheet width: ${sheetCut.width} м`);\n    }\n    \n    if (sheetCut.lengthSheet !== null) {\n      item.length_sheet = sheetCut.lengthSheet;\n      item._lengthSheetFromParsing = true;\n      itemDebug.steps.push(`📐 Sheet length: ${sheetCut.lengthSheet} м`);\n    }\n  }\n  \n  if (extractedSize) {\n    item.size = extractedSize;\n    itemDebug.steps.push(`📏 Extracted size: \"${extractedSize}\"`);\n  } else {\n    itemDebug.steps.push('⚠️ Size not extracted from name');\n  }\n  \n  // ─────────────────────────────────────────────\n  // 3.3. ДОБАВЛЕНИЕ ДЕФОЛТНЫХ ЗНАЧЕНИЙ\n  // ─────────────────────────────────────────────\n  \n  // Дефолтная длина\n  if (metalType.has_length && !item.length_per_piece && metalType.length_default) {\n    item.length_per_piece = metalType.length_default;\n    item._lengthIsDefault = true;\n  }\n  \n  // Дефолтная марка стали\n  if (metalType.has_steel_grade && !item.steel_grade) {\n    item.steel_grade = 'Ст3';\n    item._steelGradeIsDefault = true;\n  }\n  \n  // Дефолтные размеры листа (ТОЛЬКО если не распарсили из названия)\n  if (metalType.has_width && !item.width) {\n    item.width = 1.25;\n    item._widthIsDefault = true;\n  }\n  \n  if (metalType.has_length_sheet && !item.length_sheet) {\n    item.length_sheet = 2.5;\n    item._lengthSheetIsDefault = true;\n  }\n  \n  item._validation_passed = true;\n  debug.itemsValidated++;\n  validatedItems.push(item);\n}\n\n// ============================================================\n// 4. РЕЗУЛЬТАТ\n// ============================================================\n\ndebug.itemsProcessed = parsedData.items.length;\nconsole.log(`✅ Validation complete: ${debug.itemsValidated}/${debug.itemsProcessed} items validated`);\n\n// Формат для Respond: стандартный API response\nreturn [{\n  json: {\n    success: true,\n    error: null,\n    items: validatedItems,\n    _sourceType: inputData._sourceType,\n    _debug: debug\n  }\n}];"
+      },
+      "id": "fb03de02-fb61-4801-9fbe-9e994cd5b121",
+      "name": "Validate Order Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1232,
+        -240
+      ],
+      "notes": "Validates metal types, extracts sizes, adds metal_key"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// CODE: Validate Order Fields V3.4.2 (File Flow)\n// ИЗМЕНЕНИЯ v3.4.2:\n// - Исправлена логика extractSizeFromName для гнутого швеллера (AxBxC)\n// - Разделена логика балок (номер) и швеллеров (размер)\n// - Добавлен debug log для поиска metal_key\n// ============================================================\n\nconst inputData = $input.first().json;\nconst parsedData = inputData.parsed_data;\n\n// === SUPABASE CONFIG ===\nconst SUPABASE_URL = 'https://neeejfmscjetprxjscto.supabase.co';\nconst SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lZWVqZm1zY2pldHByeGpzY3RvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA3NTAyNTYsImV4cCI6MjA3NjMyNjI1Nn0.wHOtFj_pFGPEzDt2RMQr_zHfg10i9msvSi79tQCjnvU';\n\n// === DEBUG INFO ===\nconst debug = {\n  version: 'v3.4.2',\n  timestamp: new Date().toISOString(),\n  metalTypesLoaded: false,\n  metalTypesCount: 0,\n  errors: [],\n  warnings: [],\n  itemsProcessed: 0,\n  itemsValidated: 0\n};\n\nconsole.log('🚀 Validate Order Fields v3.4.2 (File) started');\n\n// ============================================================\n// СТАНДАРТНЫЕ РАСКРОИ ЛИСТОВ (ширина × длина в мм)\n// ============================================================\nconst STANDARD_SHEET_CUTS = [\n  { width: 1000, length: 2000 },\n  { width: 1250, length: 2500 },\n  { width: 1500, length: 3000 },\n  { width: 1500, length: 6000 },\n  { width: 2000, length: 6000 },\n  { width: 1, length: 2 },\n  { width: 1.25, length: 2.5 },\n  { width: 1.5, length: 3 },\n  { width: 1.5, length: 6 },\n];\n\n// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===\nfunction normalizeSize(size) {\n  if (!size) return '';\n  return String(size).toLowerCase().replace(/[×xXхХ\\*]/g, 'х').replace(/,/g, '.').replace(/\\s+/g, '').replace(/мм|mm/gi, '').trim();\n}\n\nfunction extractNumbers(text) {\n  if (!text) return [];\n  const matches = text.match(/\\d+(?:[.,]\\d+)?/g);\n  if (!matches) return [];\n  return matches.map(m => parseFloat(m.replace(',', '.')));\n}\n\nfunction isSheetCut(num1, num2) {\n  const w = Math.min(num1, num2);\n  const l = Math.max(num1, num2);\n  for (const cut of STANDARD_SHEET_CUTS) {\n    if ((Math.abs(w - cut.width) < 1 && Math.abs(l - cut.length) < 1) || (Math.abs(w - cut.width) < 0.01 && Math.abs(l - cut.length) < 0.01)) {\n      return { width: cut.width >= 100 ? cut.width / 1000 : cut.width, length: cut.length >= 100 ? cut.length / 1000 : cut.length };\n    }\n  }\n  if (w >= 100 && l >= 100 && w <= 3000 && l <= 12000) return { width: w / 1000, length: l / 1000 };\n  if (w > 0.5 && w < 5 && l > 1 && l < 15) return { width: w, length: l };\n  return null;\n}\n\nfunction extractSheetParams(itemName) {\n  const numbers = extractNumbers(itemName);\n  if (numbers.length === 0) return { size: null, width: null, lengthSheet: null };\n  const cutMatch = itemName.match(/(\\d+(?:[.,]\\d+)?)\\s*[×xXхХ\\*]\\s*(\\d+(?:[.,]\\d+)?)/i);\n  let thickness = null, width = null, lengthSheet = null;\n  if (cutMatch) {\n    const cutNum1 = parseFloat(cutMatch[1].replace(',', '.'));\n    const cutNum2 = parseFloat(cutMatch[2].replace(',', '.'));\n    const sheetCut = isSheetCut(cutNum1, cutNum2);\n    if (sheetCut) {\n      width = sheetCut.width;\n      lengthSheet = sheetCut.length;\n      for (const num of numbers) {\n        if (Math.abs(num - cutNum1) > 0.01 && Math.abs(num - cutNum2) > 0.01 && num >= 0.3 && num <= 200) {\n          thickness = num;\n          break;\n        }\n      }\n    } else {\n      for (const num of numbers) { if (num >= 0.3 && num <= 200) { thickness = num; break; } }\n    }\n  } else {\n    const trailingThickness = itemName.match(/[- ]\\s*(\\d+(?:[.,]\\d+)?)\\s*$/);\n    if (trailingThickness) {\n      const t = parseFloat(trailingThickness[1].replace(',', '.'));\n      if (t >= 0.3 && t <= 200) {\n        thickness = t;\n      }\n    }\n    if (!thickness) {\n      for (const num of numbers) { if (num >= 0.3 && num <= 200) { thickness = num; break; } }\n    }\n  }\n  return { size: thickness !== null ? String(thickness) : null, width, lengthSheet };\n}\n\nfunction extractSizeFromName(itemName, metalKey, category) {\n  if (!itemName) return null;\n  const name = itemName.toLowerCase();\n  \n  // Листы\n  if (category === 'sheet' || (metalKey && metalKey.includes('sheet'))) {\n    return extractSheetParams(itemName).size;\n  }\n  \n  // ============================================================\n  // v3.4.2: РАЗДЕЛЕНА ЛОГИКА БАЛОК И ШВЕЛЛЕРОВ\n  // ============================================================\n  \n  // БАЛКИ - номер типа \"40Ш1\", \"30К1\"\n  if (metalKey && metalKey.includes('beam')) {\n    const beamMatch = itemName.match(/(\\d+)\\s*([А-Яа-яA-Za-z]+\\d*)/);\n    if (beamMatch) return beamMatch[1] + beamMatch[2].toUpperCase();\n    const numMatch = itemName.match(/№?\\s*(\\d+)/);\n    if (numMatch) return numMatch[1];\n  }\n  \n  // ШВЕЛЛЕРЫ ГНУТЫЕ - размер AxBxC типа \"160x120x6\"\nif (metalKey && metalKey.includes('shveller') && metalKey !== 'shveller' && !metalKey.includes('_oc')) {\n    const sizeMatch = itemName.match(/(\\d+)\\s*[×xXхХ\\*]\\s*(\\d+)\\s*[×xXхХ\\*]\\s*(\\d+)/);\n    if (sizeMatch) {\n      return `${sizeMatch[1]}x${sizeMatch[2]}x${sizeMatch[3]}`;\n    }\n    // Fallback - два числа (без толщины)\n    const size2Match = itemName.match(/(\\d+)\\s*[×xXхХ\\*]\\s*(\\d+)/);\n    if (size2Match) {\n      return `${size2Match[1]}x${size2Match[2]}`;\n    }\n  }\n  \n  // ШВЕЛЛЕРЫ ОБЫЧНЫЕ - номер типа \"20\", \"30\"\n  if (metalKey && metalKey.includes('shveller') && !metalKey.includes('gnut')) {\n    const numMatch = itemName.match(/(\\d+)(?:[УПС]|[упс])?/);\n    if (numMatch) return numMatch[1];\n  }\n  \n  // Трубы и профили - формат AxBxC\n  const pipe3Match = itemName.match(/(\\d+(?:[.,]\\d+)?)\\s*[×xXхХ\\*]\\s*(\\d+(?:[.,]\\d+)?)\\s*[×xXхХ\\*]\\s*(\\d+(?:[.,]\\d+)?)/i);\n  if (pipe3Match) return `${pipe3Match[1].replace(',', '.')}х${pipe3Match[2].replace(',', '.')}х${pipe3Match[3].replace(',', '.')}`;\n  \n  const pipe2Match = itemName.match(/(\\d+(?:[.,]\\d+)?)\\s*[×xXхХ\\*]\\s*(\\d+(?:[.,]\\d+)?)/i);\n  if (pipe2Match) {\n    const d = parseFloat(pipe2Match[1].replace(',', '.')), s = parseFloat(pipe2Match[2].replace(',', '.'));\n    if (metalKey && metalKey.includes('kvadr') && s < d && s <= 12) return `${d}х${d}х${s}`;\n    return `${d}х${s}`;\n  }\n  \n  const diamMatch = itemName.match(/[⌀Øø]\\s*(\\d+(?:[.,]\\d+)?)/);\n  if (diamMatch) return diamMatch[1].replace(',', '.');\n  \n  const numbers = extractNumbers(itemName);\n  if (numbers.length >= 3) return `${numbers[0]}х${numbers[1]}х${numbers[2]}`;\n  if (numbers.length === 2) return `${numbers[0]}х${numbers[1]}`;\n  if (numbers.length === 1) return String(numbers[0]);\n  \n  return null;\n}\n\n// ============================================================\n// ГЛАВНАЯ ФУНКЦИЯ: findMetalType v3.4.2\n// Объединяет прямые правила + aliases + обратную проверку\n// ============================================================\nfunction findMetalType(itemName, metalTypes) {\n  if (!itemName || !metalTypes || metalTypes.length === 0) return null;\n  const nameLower = itemName.toLowerCase().trim();\n\n  // ============================================================\n  // ✅ ПРЯМЫЕ ПРАВИЛА (ПЕРЕД поиском по aliases)\n  // Работают и для длинных (Vision) и для коротких (Excel) названий\n  // ============================================================\n\n  // 1. ЛИСТЫ - длинные и короткие названия\n  if (nameLower.includes('прокат листовой') || nameLower.includes('листовой г/к') || \n      nameLower.includes('лист г/к') || nameLower.includes('лист горяч') ||\n      nameLower.match(/^лист\\s+\\d/) ||\n      (nameLower.includes('лист') && !nameLower.includes('оцинк') && !nameLower.includes('х/к') && !nameLower.includes('холодн') && nameLower.match(/\\d/))) {\n    const found = metalTypes.find(m => m.metal_key === 'sheet_hot');\n    if (found) {\n      console.log(`📋 Прямое правило (лист г/к): \"${itemName}\" → sheet_hot`);\n      return found;\n    }\n  }\n  \n  // Лист холоднокатаный\n  if (nameLower.includes('лист х/к') || nameLower.includes('лист холодн') || nameLower.includes('листовой х/к')) {\n    const found = metalTypes.find(m => m.metal_key === 'sheet_cold');\n    if (found) return found;\n  }\n  \n  // Лист оцинкованный\n  if (nameLower.includes('лист оцинк') || nameLower.includes('оцинкованный лист')) {\n    const found = metalTypes.find(m => m.metal_key === 'sheet_galv');\n    if (found) return found;\n  }\n\n  // 2. ПРОФИЛЬНЫЕ ТРУБЫ - распознаём по размерам AxBxC или AxB\n  const isProfilePipe = nameLower.includes('сварной профиль') || nameLower.includes('профиль сварной') ||\n      nameLower.includes('□') || nameLower.includes('профиль квадр') || \n      nameLower.includes('труба профильн') ||\n      nameLower.includes('труба квадр') ||\n      nameLower.includes('труба прямоуг') ||\n      nameLower.match(/^профиль\\s+\\d/) ||\n      nameLower.match(/^труба\\s+\\d/);\n  \n  if (isProfilePipe) {\n    const sizeMatch = itemName.match(/(\\d+)\\s*[×xXхХ\\*]\\s*(\\d+)(?:\\s*[×xXхХ\\*]\\s*(\\d+))?/);\n    if (sizeMatch) {\n      const a = parseInt(sizeMatch[1]);\n      const b = parseInt(sizeMatch[2]);\n      const c = sizeMatch[3] ? parseInt(sizeMatch[3]) : null;\n\n      if (c !== null) {\n        if (a === b) {\n          const found = metalTypes.find(m => m.metal_key === 'tryba_es_kvadr');\n          if (found) {\n            console.log(`📐 Прямое правило (квадр. труба): \"${itemName}\" → tryba_es_kvadr (${a}x${b}x${c})`);\n            return found;\n          }\n        } else {\n          const found = metalTypes.find(m => m.metal_key === 'tryba_es_pr');\n          if (found) {\n            console.log(`📐 Прямое правило (прямоуг. труба): \"${itemName}\" → tryba_es_pr (${a}x${b}x${c})`);\n            return found;\n          }\n        }\n      } else {\n        if (b <= 12) {\n          const found = metalTypes.find(m => m.metal_key === 'tryba_es_kvadr');\n          if (found) {\n            console.log(`📐 Прямое правило (квадр. труба сокр.): \"${itemName}\" → tryba_es_kvadr (${a}x${b})`);\n            return found;\n          }\n        }\n      }\n    }\n    const found = metalTypes.find(m => m.metal_key === 'tryba_es_kvadr');\n    if (found) return found;\n  }\n\n  // 3. БАЛКИ И ДВУТАВРЫ\n  if (nameLower.includes('балка') || nameLower.includes('двутавр')) {\n    const found = metalTypes.find(m => m.metal_key === 'beam');\n    if (found) return found;\n  }\n\n  // ============================================================\n  // 4. ШВЕЛЛЕРЫ (v3.4.2: улучшена логика поиска metal_key)\n  // ============================================================\n  if (nameLower.includes('швеллер')) {\n    console.log(`🔍 Ищем швеллер: \"${itemName}\"`);\n    console.log(`   гнут: ${nameLower.includes('гнут')}, оц: ${nameLower.includes('оц')}`);\n    \n    // 4.1 Гнутый оцинкованный\n    if (nameLower.includes('гнут') && nameLower.includes('оц')) {\n      // Пробуем разные варианты ключей\n      const keys = ['shveller_gnutiy_oc', 'shveller_gn_oc', 'shveller_gnutyy_oc'];\n      for (const key of keys) {\n        const found = metalTypes.find(m => m.metal_key === key);\n        if (found) {\n          console.log(`📋 Прямое правило: \"${itemName}\" → ${key}`);\n          return found;\n        }\n      }\n      console.log(`⚠️ Не найден ключ для гнутого оц. швеллера`);\n    }\n    \n    // 4.2 Гнутый\n    if (nameLower.includes('гнут')) {\n      // Пробуем разные варианты ключей\n      const keys = ['shveller_gnutiy', 'shveller_gn', 'shveller_gnutyy', 'shveller_gnutyi'];\n      for (const key of keys) {\n        const found = metalTypes.find(m => m.metal_key === key);\n        if (found) {\n          console.log(`📋 Прямое правило: \"${itemName}\" → ${key}`);\n          return found;\n        }\n      }\n      // Fallback: ищем по частичному совпадению\n      const foundPartial = metalTypes.find(m => m.metal_key.includes('shveller') && m.metal_key.includes('gn'));\n      if (foundPartial) {\n        console.log(`📋 Найден по частичному совпадению: \"${itemName}\" → ${foundPartial.metal_key}`);\n        return foundPartial;\n      }\n      console.log(`⚠️ Не найден ключ для гнутого швеллера. Доступные ключи со \"shveller\":`);\n      metalTypes.filter(m => m.metal_key.includes('shveller')).forEach(m => console.log(`   - ${m.metal_key}`));\n    }\n    \n    // 4.3 Оцинкованный\n    if (nameLower.includes('оц')) {\n      const found = metalTypes.find(m => m.metal_key === 'shveller_oc');\n      if (found) return found;\n    }\n    \n    // 4.4 Обычный швеллер\n    const found = metalTypes.find(m => m.metal_key === 'shveller');\n    if (found) return found;\n  }\n\n  // 5. УГОЛКИ\n  if (nameLower.includes('уголок')) {\n    if (nameLower.includes('оц')) {\n      const found = metalTypes.find(m => m.metal_key === 'ygolok_oc');\n      if (found) return found;\n    }\n    const found = metalTypes.find(m => m.metal_key === 'ygolok');\n    if (found) return found;\n  }\n\n  // 6. АРМАТУРА\n  if (nameLower.includes('арматур')) {\n    if (nameLower.includes('а500') || nameLower.includes('a500')) {\n      const found = metalTypes.find(m => m.metal_key === 'armature_a500c');\n      if (found) return found;\n    }\n    if (nameLower.includes('а3') || nameLower.includes('a3') || nameLower.includes('а-iii')) {\n      const found = metalTypes.find(m => m.metal_key === 'armature_a3');\n      if (found) return found;\n    }\n    if (nameLower.includes('а1') || nameLower.includes('a1') || nameLower.includes('а-i')) {\n      const found = metalTypes.find(m => m.metal_key === 'armature_a1');\n      if (found) return found;\n    }\n    const found = metalTypes.find(m => m.metal_key === 'armature_a3');\n    if (found) return found;\n  }\n\n  // 7. КРУГЛЫЕ ТРУБЫ\n  if ((nameLower.includes('труба') && !nameLower.match(/профиль|квадр|прямоуг|\\d+\\s*[×xх]\\s*\\d+\\s*[×xх]\\s*\\d+/)) ||\n      nameLower.includes('труба круг') || nameLower.includes('труба водогаз') || nameLower.includes('труба вгп')) {\n    const pipeMatch = itemName.match(/(\\d+)\\s*[×xXхХ\\*]\\s*(\\d+)(?:\\s*[×xXхХ\\*]\\s*(\\d+))?/);\n    if (!pipeMatch || !pipeMatch[3]) {\n      if (nameLower.includes('бесшов') || nameLower.includes('гост 8732')) {\n        const found = metalTypes.find(m => m.metal_key === 'tryba_besh');\n        if (found) return found;\n      }\n      if (nameLower.includes('оц')) {\n        const found = metalTypes.find(m => m.metal_key === 'tryba_vgp_oc');\n        if (found) return found;\n      }\n      const found = metalTypes.find(m => m.metal_key === 'tryba_vgp');\n      if (found) return found;\n    }\n  }\n\n  // 8. КАТАНКА\n  if (nameLower.includes('катанк')) {\n    const found = metalTypes.find(m => m.metal_key === 'katanka');\n    if (found) return found;\n  }\n\n  // 9. КРУГ (прокат круглый)\n  if (nameLower.includes('круг') && !nameLower.includes('труба')) {\n    const found = metalTypes.find(m => m.metal_key === 'krug');\n    if (found) return found;\n  }\n\n  // ============================================================\n  // ПОИСК ПО ALIASES (если прямые правила не сработали)\n  // ============================================================\n  let bestMatch = null, bestScore = 0;\n  \n  for (const metalType of metalTypes) {\n    let aliases = metalType.aliases || [];\n    if (typeof aliases === 'string') {\n      try { aliases = JSON.parse(aliases.replace(/^\"\\{/, '[').replace(/\\}\"$/, ']').replace(/\\\\\"/g, '\"')); } catch (e) { try { aliases = JSON.parse(aliases); } catch (e2) { aliases = []; } }\n    }\n    \n    for (const alias of aliases) {\n      if (!alias) continue;\n      const aliasLower = alias.toLowerCase().trim();\n      \n      if (nameLower.includes(aliasLower)) {\n        const score = aliasLower.length * 2;\n        if (score > bestScore) { bestScore = score; bestMatch = metalType; }\n      }\n      \n      if (aliasLower.includes(nameLower) && nameLower.length >= 3) {\n        const score = nameLower.length;\n        if (score > bestScore) { bestScore = score; bestMatch = metalType; }\n      }\n    }\n  }\n  \n  if (bestMatch) {\n    console.log(`🔍 Найдено по aliases: \"${itemName}\" → ${bestMatch.metal_key}`);\n  }\n  \n  return bestMatch;\n}\n\n// === ЗАГРУЗКА СПРАВОЧНИКОВ ===\nlet metalTypes = [];\ntry {\n  const typesResponse = await this.helpers.httpRequest({\n    method: 'GET',\n    url: `${SUPABASE_URL}/rest/v1/metal_types?select=*`,\n    headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },\n    json: true\n  });\n  if (Array.isArray(typesResponse)) {\n    metalTypes = typesResponse;\n    debug.metalTypesLoaded = true;\n    debug.metalTypesCount = metalTypes.length;\n    \n    // v3.4.2: Логируем доступные ключи швеллеров для отладки\n    const shvellerKeys = metalTypes.filter(m => m.metal_key.includes('shveller')).map(m => m.metal_key);\n    console.log(`📊 Доступные ключи швеллеров: ${shvellerKeys.join(', ')}`);\n  }\n} catch (error) {\n  debug.errors.push(`metal_types load error: ${error.message}`);\n}\n\nif (metalTypes.length === 0) {\n  return [{ json: { success: false, error: 'CRITICAL: metal_types not loaded', items: [], _debug: debug } }];\n}\n\n// === ВАЛИДАЦИЯ ===\nconst validatedItems = [];\nif (!parsedData || !parsedData.items || !Array.isArray(parsedData.items)) {\n  return [{ json: { success: false, error: 'No items to validate', items: [], _debug: debug } }];\n}\n\nfor (const item of parsedData.items) {\n  debug.itemsProcessed++;\n  \n  item.index = item.index || debug.itemsProcessed;\n  item.raw_text = item.raw_text || item.name;\n  \n  let simplifiedName = item.name;\n  simplifiedName = simplifiedName.replace(/\\s*по\\s*ГОСТ\\s*[\\d\\-]+/gi, '');\n  simplifiedName = simplifiedName.replace(/\\s*ГОСТ\\s*[\\d\\-]+/gi, '');\n  simplifiedName = simplifiedName.replace(/\\s*-\\s*C\\d+[-.]\\d+/gi, '');\n  simplifiedName = simplifiedName.replace(/\\s+/g, ' ').trim();\n  item.name = simplifiedName;\n  \n  const metalType = findMetalType(item.raw_text, metalTypes);\n  \n  if (!metalType) {\n    validatedItems.push({ ...item, metal_key: null, metal_name: item.name, _validation_passed: false, _validation_error: 'Тип металла не найден' });\n    debug.warnings.push(`Metal type not found for: \"${item.name}\"`);\n    continue;\n  }\n  \n  item.metal_key = metalType.metal_key;\n  item.metal_name = metalType.metal_name;\n  item._metalKey = metalType.metal_key;\n  item._metalName = metalType.metal_name;\n  item._category = metalType.category;\n  \n  const extractedSize = extractSizeFromName(item.raw_text, metalType.metal_key, metalType.category);\n  if (extractedSize) item.size = extractedSize;\n  \n  if (metalType.category === 'sheet' || metalType.metal_key.includes('sheet')) {\n    const sheetParams = extractSheetParams(item.raw_text);\n    if (sheetParams.width) { item.width = sheetParams.width; item._widthFromParsing = true; }\n    if (sheetParams.lengthSheet) { item.length_sheet = sheetParams.lengthSheet; item._lengthSheetFromParsing = true; }\n  }\n  \n  if (metalType.has_length && !item.length_per_piece && metalType.length_default) {\n    item.length_per_piece = metalType.length_default;\n    item._lengthIsDefault = true;\n  }\n  if (metalType.has_steel_grade && !item.steel_grade) {\n    item.steel_grade = 'Ст3';\n    item._steelGradeIsDefault = true;\n  }\n  if (metalType.has_width && !item.width) { item.width = 1.25; item._widthIsDefault = true; }\n  if (metalType.has_length_sheet && !item.length_sheet) { item.length_sheet = 2.5; item._lengthSheetIsDefault = true; }\n  \n  item._validation_passed = true;\n  debug.itemsValidated++;\n  validatedItems.push(item);\n}\n\nconsole.log(`✅ Validation complete: ${debug.itemsValidated}/${debug.itemsProcessed} items validated`);\n\nreturn [{ json: { success: true, error: null, items: validatedItems, _sourceType: inputData._sourceType, _debug: debug } }];"
+      },
+      "id": "dca988c7-5a4a-44fa-8934-bceb037fe5fd",
+      "name": "Validate Order Fields (File)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        -800
+      ],
+      "notes": "Validates metal types, extracts sizes, adds metal_key (File flow)"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "7cb1d902-353d-470f-9402-a879ea8ecc4a",
+      "name": "Respond: Parse",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1024,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "ca048a1b-5e01-43bb-81cd-ea26d659efa4",
+      "name": "Respond: Parse File",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -352,
+        -800
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "calc-calculate",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "f2875289-d6af-4c8e-b324-00a58d408766",
+      "name": "Webhook: Calculate",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2128,
+        80
+      ],
+      "webhookId": "calc-calculate-001",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://raw.githubusercontent.com/lamblackout/metal-calculator/main/docs/database/metals.json",
+        "options": {}
+      },
+      "id": "7b1cab58-e127-4703-8ce0-c347065fef8c",
+      "name": "HTTP: Load Metals Database",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1904,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const metalsDatabase = $('HTTP: Load Metals Database').first().json.metals;\nconst webhookData = $('Webhook: Calculate').first().json;\nconst items = webhookData.body.items || [];\n\nconst DENSITY = 7.85;\n\nfunction normalizeSize(size) {\n  if (!size) return '';\n  return String(size).replace(/[xX×*]/g, 'х').replace(/,/g, '.').trim();\n}\n\nfunction calculateWeightPerMeter(metalKey, size) {\n  const normalized = normalizeSize(size);\n  const parts = normalized.split('х').map(p => parseFloat(p));\n  \n  if (metalKey?.includes('tryba') && parts.length === 3) {\n    const [a, b, t] = parts;\n    return 2 * (a + b - 2 * t) * t * DENSITY / 1000;\n  }\n  if (metalKey?.includes('tryba') && parts.length === 2) {\n    const [d, t] = parts;\n    return (d - t) * t * Math.PI * DENSITY / 1000;\n  }\n  if ((metalKey?.includes('armature') || metalKey?.includes('circle')) && parts.length === 1) {\n    return Math.PI * parts[0] * parts[0] / 4 * DENSITY / 1000;\n  }\n  if (metalKey?.includes('sheet') && parts.length === 1) {\n    return parts[0] * DENSITY;\n  }\n  return null;\n}\n\nconst results = [];\nlet totalWeight = 0;\nlet totalLength = 0;\nlet successCount = 0;\n\nfor (const item of items) {\n  const result = {\n    index: item.index,\n    metal_name: item.metal_name || 'Неизвестно',\n    size: item.size || '-',\n    weight: null,\n    length: null,\n    pieces: null,\n    error: null\n  };\n  \n  const weightPerMeter = calculateWeightPerMeter(item.metal_key, item.size);\n  \n  if (!weightPerMeter) {\n    result.error = 'Не удалось определить вес';\n    results.push(result);\n    continue;\n  }\n  \n  const quantity = parseFloat(item.quantity) || 0;\n  const unit = (item.unit || '').toLowerCase();\n  const lengthPiece = parseFloat(item.length_per_piece) || 6;\n  const isSheet = item.metal_key?.includes('sheet');\n  \n  try {\n    if (isSheet) {\n      const width = parseFloat(item.width) || 1.25;\n      const lengthSheet = parseFloat(item.length_sheet) || 2.5;\n      const area = width * lengthSheet;\n      const weightPerSheet = weightPerMeter * area / 1000;\n      \n      if (unit.includes('т')) {\n        result.weight = quantity;\n        result.pieces = Math.ceil(quantity / weightPerSheet);\n      } else if (unit.includes('шт')) {\n        result.pieces = quantity;\n        result.weight = quantity * weightPerSheet;\n      } else if (unit.includes('²')) {\n        result.weight = quantity * weightPerMeter / 1000;\n        result.pieces = Math.ceil(quantity / area);\n      }\n      result.length = (result.pieces || 0) * lengthSheet;\n    } else {\n      if (unit.includes('т')) {\n        result.weight = quantity;\n        result.length = (quantity * 1000) / weightPerMeter;\n        result.pieces = Math.ceil(result.length / lengthPiece);\n      } else if (unit.includes('м') && !unit.includes('²')) {\n        result.length = quantity;\n        result.weight = (quantity * weightPerMeter) / 1000;\n        result.pieces = Math.ceil(quantity / lengthPiece);\n      } else if (unit.includes('шт')) {\n        result.pieces = quantity;\n        result.length = quantity * lengthPiece;\n        result.weight = (result.length * weightPerMeter) / 1000;\n      }\n    }\n    \n    if (result.weight !== null) {\n      result.weight = Math.round(result.weight * 1000) / 1000;\n      result.length = Math.round(result.length * 100) / 100;\n      totalWeight += result.weight;\n      totalLength += result.length;\n      successCount++;\n    }\n  } catch (e) {\n    result.error = e.message;\n  }\n  \n  results.push(result);\n}\n\nreturn [{\n  json: {\n    success: true,\n    items: results,\n    totals: {\n      weight: Math.round(totalWeight * 1000) / 1000,\n      length: Math.round(totalLength * 100) / 100,\n      items_total: items.length,\n      items_calculated: successCount\n    }\n  }\n}];"
+      },
+      "id": "218b246e-e9d5-43d5-b7bd-3c0467447a4e",
+      "name": "Code: Calculate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1680,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "039e59a9-7429-4508-a007-481cd1ca15c7",
+      "name": "Respond: Calculate",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1456,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "path": "calc-refs",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "83198640-ea28-43a3-810d-484f859b69b2",
+      "name": "Webhook: Get Refs",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2128,
+        384
+      ],
+      "webhookId": "calc-refs-001",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "metal_types",
+        "returnAll": true,
+        "filterType": "none"
+      },
+      "id": "067fd6c4-cdfe-4393-8d66-edd78bb4c778",
+      "name": "Supabase: Get Metal Types",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1904,
+        384
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "zV2DqqzhilTxlmiG",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const types = $input.all().map(item => item.json);\n\nreturn [{\n  json: {\n    success: true,\n    metal_types: types.map(t => ({\n      id: t.id,\n      metal_key: t.metal_key,\n      metal_name: t.metal_name,\n      category: t.category\n    })),\n    count: types.length\n  }\n}];"
+      },
+      "id": "c0de2afc-9d7b-4cbf-a5b0-e03bd2e85781",
+      "name": "Code: Format Refs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1680,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "f4db5315-017f-4c25-a12e-8af56953a1ce",
+      "name": "Respond: Refs",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1456,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Unsupported file type: ' + $json._fileType + ' (mimeType: ' + $json._mimeType + ', fileName: ' + $json._fileName + ')', items: [] }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "54c23c89-6a7e-4382-b88a-bbdbd75358d7",
+      "name": "Respond: Unsupported File",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1456,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 📋 Web Calculator API v4\n\n**Добавлено:**\n- ✅ Validate Order Fields - определяет metal_key по названию\n- ✅ Извлекает размеры из названий\n- ✅ Добавляет дефолтные значения\n\n**Endpoints:**\n- POST /calc-parse - парсинг текста\n- POST /calc-parse-file - парсинг файлов (PDF/XLSX/Image)\n- POST /calc-calculate - расчёт веса\n- GET /calc-refs - справочники",
+        "height": 320,
+        "width": 496
+      },
+      "id": "431c45d0-7bb7-492d-8f41-e554f945aa1e",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -2704,
+        -608
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "chatgpt-4o-latest",
+          "mode": "list",
+          "cachedResultName": "CHATGPT-4O-LATEST"
+        },
+        "text": "Распознай заявку на металлопрокат с изображения.\n\nПРАВИЛА ЧТЕНИЯ ТАБЛИЦ:\n1. Читай ВСЕ колонки - размер/толщина может быть в отдельной колонке от названия\n2. Объединяй название + размер в поле \"name\"\n3. Символы: □ = труба квадратная, ∠ = уголок, -t = толщина листа\n4. ВНИМАТЕЛЬНО смотри на ЗАГОЛОВКИ колонок!\n\nПРЕОБРАЗОВАНИЕ В name:\n- \"Прокат листовой\" + \"-t18\" → \"Лист г/к 18\"\n- \"□80x80x5\" → \"Труба квадр. 80x80x5\" (если A=B)\n- \"□180x140x6\" → \"Труба прямоуг. 180x140x6\" (если A≠B)\n- \"Швеллер 160x120x6\" → \"Швеллер гнутый 160x120x6\"\n- \"∠125x125x8\" → \"Уголок 125x125x8\"\n- Читай размеры ТОЧНО как написано!\n\n⚠️ КРИТИЧЕСКИ ВАЖНО - РАСПОЗНАВАНИЕ КОЛОНОК:\n- Колонка \"М/п\" или \"м.п.\" = МЕТРЫ погонные → quantity + unit=\"м\"\n- Колонка \"Шт.\" = ШТУКИ → pieces (число) + unit=\"шт\"\n- Колонка с тоннами (т, тн) → quantity + unit=\"тн\"\n- Для БАЛОК, ДВУТАВРОВ, ШВЕЛЛЕРОВ, ТРУБ обычно указывают МЕТРЫ (М/п), не тонны!\n- Для ЛИСТОВ обычно указывают ШТУКИ (Шт.)\n- НЕ ПЕРЕСЧИТЫВАЙ числа! Бери значения из таблицы КАК ЕСТЬ\n\n⚠️ ОСОБЫЕ ПРАВИЛА ДЛЯ ЛИСТОВ:\n- Для позиций \"Лист\" ОБЯЗАТЕЛЬНО ищи колонку \"Шт.\" в таблице\n- Если в колонке \"Шт.\" стоит число (1, 2, 3...) → pieces = это число\n- Если написано \"пол.листа\" или \"0.5\" → pieces = 0.5\n- Если колонка \"Шт.\" пустая для листа → pieces = null\n- НЕ ВЫЧИСЛЯЙ штуки сам из веса или метров!\n\nПРАВИЛА ПАРСИНГА:\n- Количество в МЕТРАХ (м, м.п., М/п, пог.м) → quantity + unit=\"м\"\n- Количество в ТОННАХ (т, тн) → quantity + unit=\"тн\"\n- Количество ШТУК (шт, Шт.) → pieces (число) + unit=\"шт\"\n- Длина 1 штуки (метры) → length_per_piece\n- Ширина листа → width (в метрах)\n- Марка стали (ст3, 09Г2С, С345) → steel_grade\n- ГОСТ если указан → gost\n- Отсутствующие данные → null\n\nJSON формат:\n{\"items\":[{\"name\":\"название с размером\",\"quantity\":число,\"unit\":\"м или тн или шт\",\"gost\":\"ГОСТ...\",\"pieces\":null,\"length_per_piece\":null,\"width\":null,\"steel_grade\":\"марка\"}],\"customer_name\":null,\"delivery_address\":null,\"customer_inn\":null,\"contact_person\":null,\"contact_phone\":null,\"additional_notes\":null}\n\nСокращения: х/к=холоднокатаный, г/к=горячекатаный, э/с=электросварная, оц=оцинкованная\n\nПРИМЕРЫ:\n\"Двутавр 30Б2, М/п: 204\" → {\"name\":\"Двутавр 30Б2\",\"quantity\":204,\"unit\":\"м\"}\n\"Балка 20 - 15шт по 12м\" → {\"name\":\"Балка 20\",\"pieces\":15,\"length_per_piece\":12,\"unit\":\"шт\"}\n\"Лист 8, Шт.: 1\" → {\"name\":\"Лист г/к 8\",\"pieces\":1,\"unit\":\"шт\"}\n\"Лист 30, Шт.: пол.листа\" → {\"name\":\"Лист г/к 30\",\"pieces\":0.5,\"unit\":\"шт\"}\n\"Лист 8мм 1.5х6м\" → {\"name\":\"Лист г/к 8\",\"width\":1.5,\"length_per_piece\":6}\n\nВерни ТОЛЬКО валидный компактный JSON.",
+        "inputType": "base64",
+        "binaryPropertyName": "file",
+        "options": {
+          "maxTokens": 16000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2,
+      "position": [
+        -1456,
+        -608
+      ],
+      "id": "10da4f4a-4afe-4b8a-aec6-61358bbf2e78",
+      "name": "Analyze image",
+      "credentials": {
+        "openAiApi": {
+          "id": "ZNb2GdFIiM7vrhFZ",
+          "name": "OpenAi account"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Webhook: Parse File": [
+      {
+        "json": {
+          "headers": {
+            "host": "primary-production-4e88.up.railway.app",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+            "content-length": "10268",
+            "accept": "*/*",
+            "accept-encoding": "gzip, deflate, br, zstd",
+            "accept-language": "ru,en;q=0.9",
+            "content-type": "multipart/form-data; boundary=----WebKitFormBoundaryAAQ0ORIBmYcKB1FA",
+            "origin": "https://lamblackout.github.io",
+            "priority": "u=1, i",
+            "referer": "https://lamblackout.github.io/",
+            "sec-ch-ua": "\"Google Chrome\";v=\"141\", \"Not?A_Brand\";v=\"8\", \"Chromium\";v=\"141\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "cross-site",
+            "x-forwarded-for": "154.81.198.52",
+            "x-forwarded-host": "primary-production-4e88.up.railway.app",
+            "x-forwarded-proto": "https",
+            "x-railway-edge": "railway/europe-west4-drams3a",
+            "x-railway-request-id": "FAjGlMw9TJajfEe55nX1uw",
+            "x-real-ip": "154.81.198.52",
+            "x-request-start": "1766739760680"
+          },
+          "params": {},
+          "query": {},
+          "body": {},
+          "webhookUrl": "https://primary-production-4e88.up.railway.app/webhook/calc-parse-file",
+          "executionMode": "production"
+        },
+        "binary": {
+          "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "fileExtension": "xlsx",
+            "data": "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",
+            "fileName": "Заявка от ЖБИ залито желтым - наше.xlsx",
+            "fileSize": "9.97 kB"
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook: Parse": {
+      "main": [
+        [
+          {
+            "node": "Set: Text Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Text Content": {
+      "main": [
+        [
+          {
+            "node": "OpenAI: Parse Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI: Parse Order": {
+      "main": [
+        [
+          {
+            "node": "Code: Process Parse Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Process Parse Result": {
+      "main": [
+        [
+          {
+            "node": "Validate Order Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Parse File": {
+      "main": [
+        [
+          {
+            "node": "Code: Detect File Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Detect File Type": {
+      "main": [
+        [
+          {
+            "node": "Switch: File Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch: File Type": {
+      "main": [
+        [
+          {
+            "node": "Extract: PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract: XLSX",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Analyze image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Unsupported File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract: PDF": {
+      "main": [
+        [
+          {
+            "node": "Code: Combine Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract: XLSX": {
+      "main": [
+        [
+          {
+            "node": "Code: Combine Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Combine Text": {
+      "main": [
+        [
+          {
+            "node": "OpenAI: Parse File Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI: Parse File Content": {
+      "main": [
+        [
+          {
+            "node": "Code: Process File Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Process File Parse": {
+      "main": [
+        [
+          {
+            "node": "Validate Order Fields (File)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Order Fields": {
+      "main": [
+        [
+          {
+            "node": "Respond: Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Order Fields (File)": {
+      "main": [
+        [
+          {
+            "node": "Respond: Parse File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Calculate": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Load Metals Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Load Metals Database": {
+      "main": [
+        [
+          {
+            "node": "Code: Calculate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Calculate": {
+      "main": [
+        [
+          {
+            "node": "Respond: Calculate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Get Refs": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Get Metal Types",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Get Metal Types": {
+      "main": [
+        [
+          {
+            "node": "Code: Format Refs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Format Refs": {
+      "main": [
+        [
+          {
+            "node": "Respond: Refs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze image": {
+      "main": [
+        [
+          {
+            "node": "Code: Combine Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "fff12bd7-eb77-4530-96cd-9f53d9a340e6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e053b61b8b3bdff69a323dc7c626e5598b37038308beed9b02f6dd362745fcdd"
+  },
+  "id": "XHJStACtRzHma7bi",
+  "tags": []
+}

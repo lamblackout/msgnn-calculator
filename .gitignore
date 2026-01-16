@@ -1,0 +1,18 @@
+# Временные файлы Claude
+tmpclaude-*
+
+# Node modules (если будут использоваться)
+node_modules/
+
+# Credentials и secrets (НЕ коммитить!)
+*.env
+.env.*
+credentials.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

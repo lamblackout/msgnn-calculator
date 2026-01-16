@@ -1,0 +1,470 @@
+{
+  "name": "Get Supplier Summary v2",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "get-supplier-summary",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "1be0d8ce-a89c-40b1-bb5d-973fe274217f",
+      "name": "Webhook: Get Summary",
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        -1296,
+        176
+      ],
+      "typeVersion": 2,
+      "webhookId": "get-supplier-summary-v2"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "supplier_requests",
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "request_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.query.request_id }}"
+            }
+          ]
+        }
+      },
+      "id": "dc9bf81d-8a34-4e91-be58-d4ec3cbb658f",
+      "name": "Supabase: Get Request",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        -1088,
+        176
+      ],
+      "typeVersion": 1,
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "zV2DqqzhilTxlmiG",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Проверяем найдена ли заявка\nconst data = $input.first().json;\n\nif (!data || !data.request_id) {\n  return [{\n    json: {\n      exists: false,\n      error: 'request_not_found',\n      message: 'Заявка не найдена'\n    }\n  }];\n}\n\n// Проверяем прошло ли время сбора\nconst collectAt = new Date(data.collect_at);\nconst now = new Date();\n\nconst isReady = now >= collectAt;\nconst remainingMs = collectAt - now;\nconst remainingMinutes = Math.max(0, Math.ceil(remainingMs / 60000));\n\nconsole.log(`📋 Заявка: ${data.request_id}`);\nconsole.log(`⏰ Время сбора: ${collectAt.toISOString()}`);\nconsole.log(`⏰ Сейчас: ${now.toISOString()}`);\nconsole.log(`✅ Готова: ${isReady}`);\n\nreturn [{\n  json: {\n    exists: true,\n    is_ready: isReady,\n    remaining_minutes: remainingMinutes,\n    ...data\n  }\n}];"
+      },
+      "id": "cadadd1b-b6c9-474d-b9b7-3646bd2b7c91",
+      "name": "Code: Check Request",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -864,
+        176
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "exists-check",
+              "leftValue": "={{ $json.exists }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1fa78280-727e-4a7f-9866-4da0c268dd48",
+      "name": "IF: Request Exists?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -640,
+        176
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"error\": \"request_not_found\",\n  \"message\": \"Заявка не найдена\"\n}",
+        "options": {
+          "responseCode": "404",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "4f1a376a-ff1c-4547-a7ed-26165a8f4a1f",
+      "name": "Respond: Not Found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        -416,
+        384
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ready-check",
+              "leftValue": "={{ $json.is_ready }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4096e097-eebd-4e04-a57d-df850f9e1b05",
+      "name": "IF: Time Passed?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -416,
+        176
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"error\": \"not_ready\",\n  \"message\": \"Сбор ответов ещё идёт. Осталось ~{{ $json.remaining_minutes }} мин.\",\n  \"remaining_minutes\": {{ $json.remaining_minutes }},\n  \"collect_at\": \"{{ $json.collect_at }}\"\n}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "b357f362-a439-4cd4-ab13-148ecd56b972",
+      "name": "Respond: Not Ready",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        -208,
+        384
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "supplier_responses",
+        "returnAll": true,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "request_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.request_id }}"
+            }
+          ]
+        }
+      },
+      "id": "5289725f-3fa1-4966-8d93-7490c97adc4a",
+      "name": "Supabase: Get Responses",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        -208,
+        176
+      ],
+      "typeVersion": 1,
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "zV2DqqzhilTxlmiG",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Формируем сводную таблицу\nconst responses = $input.all();\nconst requestData = $('Code: Check Request').first().json;\nconst requestId = requestData.request_id;\n\n// Парсим items из JSON строки если нужно\nlet originalItems = requestData.items;\nif (typeof originalItems === 'string') {\n  try {\n    originalItems = JSON.parse(originalItems);\n  } catch (e) {\n    originalItems = [];\n  }\n}\nif (!Array.isArray(originalItems)) {\n  originalItems = [];\n}\n\nconsole.log(`📊 Формирование сводки для ${requestId}`);\nconsole.log(`📦 Позиций в заказе: ${originalItems.length}`);\nconsole.log(`📨 Ответов в базе: ${responses.length}`);\n\n// Собираем всех поставщиков которые ответили с ценами\nconst suppliers = [];\nconst supplierPrices = {};\nconst supplierNotes = {};\n\nfor (const resp of responses) {\n  const data = resp.json;\n  \n  if (!data || !data.request_id) continue;\n  \n  let prices = data.prices;\n  let notes = data.notes;\n  \n  if (typeof prices === 'string') {\n    try { prices = JSON.parse(prices); } catch (e) { prices = {}; }\n  }\n  if (typeof notes === 'string') {\n    try { notes = JSON.parse(notes); } catch (e) { notes = {}; }\n  }\n  \n  if (prices && Object.keys(prices).length > 0) {\n    let email = data.supplier_email || '';\n    const emailMatch = email.match(/<([^>]+)>/);\n    if (emailMatch) {\n      email = emailMatch[1];\n    }\n    email = email.toLowerCase().trim();\n    \n    let name = data.supplier_name || email;\n    if (name.includes('<')) {\n      name = name.split('<')[0].trim();\n    }\n    if (!name || name.length < 2) {\n      name = email.split('@')[0];\n    }\n    \n    suppliers.push({ email, name });\n    supplierPrices[email] = prices;\n    supplierNotes[email] = notes || {};\n    \n    console.log(`✅ Поставщик: ${name} (${email}) - ${Object.keys(prices).length} цен`);\n  }\n}\n\nconsole.log(`✅ Всего поставщиков с ценами: ${suppliers.length}`);\n\n// Формируем строки для сводной таблицы\nconst summaryRows = [];\nlet totalBestPrice = 0;\n\nfor (let i = 0; i < originalItems.length; i++) {\n  const item = originalItems[i];\n  const itemIndex = String(i + 1);\n  \n  const row = {\n    '№': itemIndex,\n    'Наименование': item.metal_type || item.metal_name || item.name || '',\n    'Размер': item.size || '',\n    'Марка стали': item.steel_grade || item.grade || '',\n    'Вес, т': item.weight || 0\n  };\n  \n  let bestPrice = null;\n  \n  for (const supplier of suppliers) {\n    const prices = supplierPrices[supplier.email] || {};\n    const notes = supplierNotes[supplier.email] || {};\n    const price = prices[itemIndex];\n    const note = notes[itemIndex];\n    \n    const colName = supplier.name.substring(0, 20);\n    row[`${colName} (цена)`] = price || '—';\n    \n    if (note) {\n      row[`${colName} (прим.)`] = note;\n    }\n    \n    if (price && (bestPrice === null || price < bestPrice)) {\n      bestPrice = price;\n    }\n  }\n  \n  // Убрали: row['Лучшая цена'] и row['Лучший поставщик']\n  \n  if (bestPrice) {\n    totalBestPrice += bestPrice;\n  }\n  \n  summaryRows.push(row);\n}\n\nconst totalWeight = originalItems.reduce((sum, item) => sum + (parseFloat(item.weight) || 0), 0);\n\nreturn [{ \n  json: {\n    request_id: requestId,\n    created_at: requestData.created_at,\n    category: requestData.category,\n    total_weight: totalWeight.toFixed(3),\n    suppliers_count: requestData.suppliers_count || 0,\n    responses_count: suppliers.length,\n    total_best_price: Math.round(totalBestPrice),\n    summary_rows: summaryRows,\n    suppliers: suppliers.map(s => s.name),\n    has_responses: suppliers.length > 0\n  }\n}];"
+      },
+      "id": "dbf7eaf4-565e-4fce-9c26-2a03eb9e1868",
+      "name": "Code: Build Summary",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        32,
+        176
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Подготовка данных для Excel\nconst summaryData = $json;\nconst rows = summaryData.summary_rows || [];\n\nif (rows.length === 0) {\n  return [{ \n    json: { \n      '№': '—',\n      'Наименование': 'Нет данных',\n      'Размер': '',\n      'Марка стали': '',\n      'Вес, т': ''\n    } \n  }];\n}\n\n// Просто передаём строки как есть\nconst result = rows.map(row => ({ json: row }));\n\n// Добавляем итоговую строку\nresult.push({\n  json: {\n    '№': '',\n    'Наименование': 'ИТОГО:',\n    'Размер': '',\n    'Марка стали': '',\n    'Вес, т': summaryData.total_weight\n  }\n});\n\nreturn result;"
+      },
+      "id": "8ef1cf30-5c50-4f75-8742-6dbeff7b8494",
+      "name": "Code: Prepare for Excel",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        240,
+        176
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "operation": "toFile",
+        "fileFormat": "xlsx",
+        "options": {
+          "fileName": "={{ 'Сводка_' + $('Code: Build Summary').first().json.request_id + '.xlsx' }}",
+          "headerRow": true,
+          "sheetName": "Сравнение цен"
+        }
+      },
+      "id": "a6bab0ec-cfdf-46ce-9c89-0c2b9264d525",
+      "name": "Spreadsheet: Create Excel",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "position": [
+        464,
+        176
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Получаем Excel файл и конвертируем в base64\nconst summaryData = $('Code: Build Summary').first().json;\nconst binaryData = $input.first().binary;\n\nlet excelBase64 = '';\nlet fileName = `Сводка_${summaryData.request_id}.xlsx`;\n\n// Spreadsheet нода сохраняет в binary.data\nif (binaryData) {\n  // Находим ключ с Excel файлом\n  for (const key of Object.keys(binaryData)) {\n    const file = binaryData[key];\n    if (file && file.data) {\n      excelBase64 = file.data;\n      fileName = file.fileName || fileName;\n      console.log(`📎 Найден файл: ${fileName}, размер base64: ${excelBase64.length}`);\n      break;\n    }\n  }\n}\n\nif (!excelBase64) {\n  console.log('⚠️ Excel файл не найден в binary данных');\n  console.log('Binary keys:', Object.keys(binaryData || {}));\n}\n\nreturn [{\n  json: {\n    success: true,\n    ready: true,\n    request_id: summaryData.request_id,\n    category: summaryData.category,\n    total_weight: summaryData.total_weight,\n    suppliers_count: summaryData.suppliers_count,\n    responses_count: summaryData.responses_count,\n    total_best_price: summaryData.total_best_price,\n    suppliers: summaryData.suppliers,\n    has_responses: summaryData.has_responses,\n    excel_base64: excelBase64,\n    excel_filename: fileName,\n    message: summaryData.responses_count > 0 \n      ? `Получено ${summaryData.responses_count} ответов от поставщиков`\n      : 'Нет ответов от поставщиков'\n  }\n}];"
+      },
+      "id": "598683fb-3902-4883-86ff-da3b07d5dd01",
+      "name": "Code: Final Response",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        688,
+        176
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "63868ac5-e268-4146-8a08-70b3e5d24660",
+      "name": "Respond: Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        912,
+        176
+      ],
+      "typeVersion": 1.1
+    }
+  ],
+  "pinData": {
+    "Webhook: Get Summary": [
+      {
+        "json": {
+          "headers": {
+            "host": "primary-production-4e88.up.railway.app",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+            "accept": "*/*",
+            "accept-encoding": "gzip, deflate, br, zstd",
+            "accept-language": "en-US,en;q=0.9,ru;q=0.8",
+            "if-none-match": "W/\"6b92-knhBySvqylXcVWS9fiJq+QF8yHw\"",
+            "origin": "https://lamblackout.github.io",
+            "priority": "u=1, i",
+            "referer": "https://lamblackout.github.io/",
+            "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "cross-site",
+            "x-forwarded-for": "194.110.207.107",
+            "x-forwarded-host": "primary-production-4e88.up.railway.app",
+            "x-forwarded-proto": "https",
+            "x-railway-edge": "railway/europe-west4-drams3a",
+            "x-railway-request-id": "L562e27oTG-qecIqYqdHTg",
+            "x-real-ip": "194.110.207.107",
+            "x-request-start": "1766585358646"
+          },
+          "params": {},
+          "query": {
+            "request_id": "ЗП-20251224-079"
+          },
+          "body": {},
+          "webhookUrl": "https://primary-production-4e88.up.railway.app/webhook/get-supplier-summary",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook: Get Summary": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Get Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Get Request": {
+      "main": [
+        [
+          {
+            "node": "Code: Check Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Check Request": {
+      "main": [
+        [
+          {
+            "node": "IF: Request Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Request Exists?": {
+      "main": [
+        [
+          {
+            "node": "IF: Time Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Time Passed?": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Get Responses",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Supabase: Get Responses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Get Responses": {
+      "main": [
+        [
+          {
+            "node": "Code: Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Build Summary": {
+      "main": [
+        [
+          {
+            "node": "Code: Prepare for Excel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Prepare for Excel": {
+      "main": [
+        [
+          {
+            "node": "Spreadsheet: Create Excel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Spreadsheet: Create Excel": {
+      "main": [
+        [
+          {
+            "node": "Code: Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Final Response": {
+      "main": [
+        [
+          {
+            "node": "Respond: Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f43fc164-a382-4525-ae78-7f7d9edbb166",
+  "meta": {
+    "instanceId": "e053b61b8b3bdff69a323dc7c626e5598b37038308beed9b02f6dd362745fcdd"
+  },
+  "id": "foJlJJH5mzvPjN1R",
+  "tags": []
+}

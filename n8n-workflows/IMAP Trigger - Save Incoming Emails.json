@@ -1,0 +1,391 @@
+{
+  "name": "IMAP Trigger - Save Incoming Emails",
+  "nodes": [
+    {
+      "parameters": {
+        "downloadAttachments": true,
+        "options": {}
+      },
+      "id": "6ce5605c-0782-452a-825c-48b0d2d24487",
+      "name": "IMAP: New Email",
+      "type": "n8n-nodes-base.emailReadImap",
+      "position": [
+        -1072,
+        160
+      ],
+      "typeVersion": 2.1,
+      "credentials": {
+        "imap": {
+          "id": "LuRdMysgJNn2dnjZ",
+          "name": "IMAP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Проверяем содержит ли письмо request_id (формат: ЗП-YYYYMMDD-XXX или ЗП-YYYYMMDD-XXXXXXXXX)\nconst email = $input.first().json;\nconst binary = $input.first().binary || {};\n// Получаем тему и тело письма\nconst subject = email.subject || '';\nconst textPlain = email.textPlain || email.text || '';\nconst textHtml = email.textHtml || email.html || '';\n// Ищем request_id в формате ЗП-YYYYMMDD-XXX (поддержка старого и нового формата)\nconst requestIdPattern = /ЗП-\\d{8}-\\d+(-[A-Z]{2,3})?/g;\nlet requestId = null;\n// Сначала ищем в теме\nconst subjectMatch = subject.match(requestIdPattern);\nif (subjectMatch) {\n  requestId = subjectMatch[0];\n}\n// Если не нашли в теме - ищем в теле\nif (!requestId) {\n  const bodyMatch = textPlain.match(requestIdPattern) || textHtml.match(requestIdPattern);\n  if (bodyMatch) {\n    requestId = bodyMatch[0];\n  }\n}\n// Извлекаем email отправителя\nlet fromEmail = 'unknown';\nlet fromName = 'Unknown';\nif (email.from) {\n  if (typeof email.from === 'string') {\n    fromEmail = email.from;\n    fromName = email.from.split('@')[0];\n  } else if (email.from.value && email.from.value[0]) {\n    fromEmail = email.from.value[0].address || 'unknown';\n    fromName = email.from.value[0].name || fromEmail.split('@')[0];\n  }\n}\n// Проверяем есть ли Excel вложение\nlet hasExcel = false;\nlet excelBinaryKey = null;\nfor (const [key, file] of Object.entries(binary)) {\n  const filename = file.fileName || '';\n  const mimeType = file.mimeType || '';\n  \n  if (filename.endsWith('.xlsx') || filename.endsWith('.xls') || \n      mimeType.includes('spreadsheet') || mimeType.includes('excel')) {\n    hasExcel = true;\n    excelBinaryKey = key;\n    break;\n  }\n}\nconsole.log(`📧 Письмо от: ${fromEmail}`);\nconsole.log(`📋 Request ID: ${requestId || 'НЕ НАЙДЕН'}`);\nconsole.log(`📎 Excel: ${hasExcel ? 'Да' : 'Нет'}`);\nconst result = {\n  json: {\n    has_request_id: !!requestId,\n    request_id: requestId,\n    supplier_email: fromEmail.toLowerCase(),\n    supplier_name: fromName,\n    email_subject: subject,\n    email_message_id: email.messageId || email.id || '',\n    received_at: email.date || new Date().toISOString(),\n    has_excel: hasExcel,\n    excel_binary_key: excelBinaryKey\n  }\n};\n// Передаём binary данные дальше\nif (Object.keys(binary).length > 0) {\n  result.binary = binary;\n}\nreturn [result];"
+      },
+      "id": "02f3c7fc-0a3f-4d6f-9da4-0aeb24bea84f",
+      "name": "Code: Check Request ID",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -848,
+        160
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "has-request-id",
+              "leftValue": "={{ $json.has_request_id }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "204ca282-0ca2-4e22-b14b-477b435b9595",
+      "name": "IF: Has Request ID?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -640,
+        160
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {},
+      "id": "33ad07f0-b2c9-417c-8b2f-9c81dc6706eb",
+      "name": "No Request ID - Ignore",
+      "type": "n8n-nodes-base.noOp",
+      "position": [
+        -416,
+        288
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-excel",
+              "leftValue": "={{ $json.has_excel }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c2b93d59-f7ad-44bd-b8c5-3e746efbf726",
+      "name": "IF: Has Excel?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -416,
+        48
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "={{ $json.excel_binary_key }}",
+        "fileFormat": "xlsx",
+        "options": {
+          "headerRow": true
+        }
+      },
+      "id": "cc4dfd23-5a99-43d6-9afb-18fe253236e8",
+      "name": "Spreadsheet: Read Excel",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "position": [
+        -192,
+        -80
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Парсинг цен из Excel\nconst rows = $input.all();\nconst emailData = $('IF: Has Excel?').first().json;\n\nconst prices = {};\nconst notes = {};\nlet hasAllPositions = true;\n\n// Возможные названия колонок\nconst priceColumns = ['Цена', 'цена', 'Price', 'ЦЕНА', 'Стоимость', 'стоимость', 'price', 'Цена за тонну', 'Цена/т'];\nconst noteColumns = ['Примечания', 'примечания', 'Примечание', 'Комментарий', 'комментарий', 'Notes', 'notes', 'Comment'];\nconst indexColumns = ['№', '№ п/п', 'N', '#', 'Номер', 'номер', 'п/п'];\n\nfor (let i = 0; i < rows.length; i++) {\n  const row = rows[i].json;\n  \n  // Находим номер позиции\n  let itemIndex = null;\n  for (const col of indexColumns) {\n    if (row[col] !== undefined && row[col] !== null && row[col] !== '') {\n      itemIndex = String(row[col]);\n      break;\n    }\n  }\n  \n  // Если нет номера - используем индекс строки + 1\n  if (!itemIndex) {\n    itemIndex = String(i + 1);\n  }\n  \n  // Находим цену\n  let price = null;\n  for (const col of priceColumns) {\n    if (row[col] !== undefined && row[col] !== null && row[col] !== '') {\n      const value = String(row[col]).replace(/[^\\d.,]/g, '').replace(',', '.');\n      const parsed = parseFloat(value);\n      if (!isNaN(parsed) && parsed > 0) {\n        price = parsed;\n        break;\n      }\n    }\n  }\n  \n  // Находим примечание\n  let note = null;\n  for (const col of noteColumns) {\n    if (row[col] !== undefined && row[col] !== null && row[col] !== '') {\n      note = String(row[col]).trim();\n      break;\n    }\n  }\n  \n  if (price) {\n    prices[itemIndex] = price;\n  } else {\n    hasAllPositions = false;\n  }\n  \n  if (note) {\n    notes[itemIndex] = note;\n  }\n}\n\nconst pricesCount = Object.keys(prices).length;\nconsole.log(`💰 Извлечено цен: ${pricesCount}`);\nconsole.log(`📝 Примечаний: ${Object.keys(notes).length}`);\n\nreturn [{\n  json: {\n    request_id: emailData.request_id,\n    supplier_email: emailData.supplier_email,\n    supplier_name: emailData.supplier_name,\n    email_subject: emailData.email_subject,\n    email_message_id: emailData.email_message_id,\n    received_at: emailData.received_at,\n    prices: prices,\n    notes: notes,\n    prices_count: pricesCount,\n    has_all_positions: hasAllPositions\n  }\n}];"
+      },
+      "id": "e60197c3-c953-4489-9fda-05f9002b81f8",
+      "name": "Code: Parse Prices",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        32,
+        -80
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Письмо без Excel - сохраняем с пустыми ценами\nconst emailData = $json;\n\nreturn [{\n  json: {\n    request_id: emailData.request_id,\n    supplier_email: emailData.supplier_email,\n    supplier_name: emailData.supplier_name,\n    email_subject: emailData.email_subject,\n    email_message_id: emailData.email_message_id,\n    received_at: emailData.received_at,\n    prices: {},\n    notes: {},\n    prices_count: 0,\n    has_all_positions: false\n  }\n}];"
+      },
+      "id": "9c04fcfd-07a3-4135-bc0d-374469913e73",
+      "name": "Code: No Excel",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -192,
+        160
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "tableId": "supplier_responses",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "request_id",
+              "fieldValue": "={{ $json.request_id }}"
+            },
+            {
+              "fieldId": "supplier_email",
+              "fieldValue": "={{ $json.supplier_email }}"
+            },
+            {
+              "fieldId": "supplier_name",
+              "fieldValue": "={{ $json.supplier_name }}"
+            },
+            {
+              "fieldId": "email_subject",
+              "fieldValue": "={{ $json.email_subject }}"
+            },
+            {
+              "fieldId": "email_message_id",
+              "fieldValue": "={{ $json.email_message_id }}"
+            },
+            {
+              "fieldId": "received_at",
+              "fieldValue": "={{ $json.received_at }}"
+            },
+            {
+              "fieldId": "prices",
+              "fieldValue": "={{ $json.prices }}"
+            },
+            {
+              "fieldId": "notes",
+              "fieldValue": "={{ $json.notes }}"
+            },
+            {
+              "fieldId": "has_all_positions",
+              "fieldValue": "={{ $json.has_all_positions }}"
+            }
+          ]
+        }
+      },
+      "id": "dee339d6-b34f-4078-b3f3-b13fb54efcf2",
+      "name": "Supabase: Save Response",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        480,
+        48
+      ],
+      "typeVersion": 1,
+      "credentials": {
+        "supabaseApi": {
+          "id": "zV2DqqzhilTxlmiG",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "60c0210b-1110-4ead-8431-a99abeccb6ea",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "position": [
+        688,
+        48
+      ],
+      "typeVersion": 1
+    }
+  ],
+  "pinData": {
+    "IMAP: New Email": [
+      {
+        "json": {
+          "textHtml": "<div dir=\"ltr\"><br></div><br><div class=\"gmail_quote gmail_quote_container\"><div dir=\"ltr\" class=\"gmail_attr\">пт, 16 янв. 2026 г. в 08:55, МеталлСтройГрупп &lt;<a href=\"mailto:zakup@msgnn.ru\">zakup@msgnn.ru</a>&gt;:<br></div><blockquote class=\"gmail_quote\" style=\"margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex\">\r\n<u></u>\r\n\r\n\r\n  \r\n\r\n<div style=\"font-family:Arial,sans-serif;font-size:14px;color:rgb(51,51,51)\">\r\n  <p>Добрый день!</p>\r\n  \r\n  <p>Просим предоставить цены на следующие позиции:</p>\r\n  \r\n  <p><strong>Заявка №ЗП-20260116-085433987-FAC</strong></p>\r\n  \r\n  <table style=\"border-collapse:collapse;width:100%;margin:15px 0px\">\r\n    <thead>\r\n      <tr style=\"background-color:rgb(245,245,245)\">\r\n        <th style=\"border:1px solid rgb(221,221,221);padding:8px\">№</th>\r\n        <th style=\"border:1px solid rgb(221,221,221);padding:8px\">Наименование</th>\r\n        <th style=\"border:1px solid rgb(221,221,221);padding:8px\">Размер</th>\r\n        <th style=\"border:1px solid rgb(221,221,221);padding:8px\">Марка стали</th>\r\n        <th style=\"border:1px solid rgb(221,221,221);padding:8px\">Вес, т</th>\r\n        <th style=\"border:1px solid rgb(221,221,221);padding:8px\">Кол-во</th>\r\n      </tr>\r\n    </thead>\r\n    <tbody>\r\n      <tr>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">1</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px\">Швеллер</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">27П</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">ст3</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">3.324</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">20</td>\r\n  </tr><tr>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">2</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px\">Швеллер гнутый</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">80х60х4</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">ст3</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">1.394</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">80</td>\r\n  </tr><tr>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">3</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px\">Уголок</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">80х80х8</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">ст3</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">0.174</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">3</td>\r\n  </tr><tr>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">4</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px\">Уголок</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">75х75х5</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">ст3</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">1.392</td>\r\n    <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">40</td>\r\n  </tr>\r\n      <tr style=\"font-weight:bold;background-color:rgb(240,240,240)\">\r\n        <td colspan=\"4\" style=\"border:1px solid rgb(221,221,221);padding:8px\">ИТОГО:</td>\r\n        <td style=\"border:1px solid rgb(221,221,221);padding:8px;text-align:center\">6.284 т</td>\r\n        <td style=\"border:1px solid rgb(221,221,221);padding:8px\"></td>\r\n      </tr>\r\n    </tbody>\r\n  </table>\r\n\r\n  <div style=\"background-color:rgb(255,243,205);border:1px solid rgb(255,193,7);padding:15px;margin:20px 0px;border-radius:5px\">\r\n    <p style=\"margin:0px 0px 10px;font-weight:bold;color:rgb(133,100,4)\">⚡ ВАЖНО: Сбор цен заканчивается через 30 минут!</p>\r\n    <p style=\"margin:0px;color:rgb(133,100,4)\">Если отвечаете позже — ваша цена может быть не учтена.</p>\r\n  </div>\r\n\r\n  <div style=\"background-color:rgb(231,243,255);border:1px solid rgb(33,150,243);padding:15px;margin:20px 0px;border-radius:5px\">\r\n    <p style=\"margin:0px 0px 10px;font-weight:bold;color:rgb(21,101,192)\">📋 Как ответить:</p>\r\n    <ol style=\"margin:0px;padding-left:20px;color:rgb(21,101,192)\">\r\n      <li>Скачайте прикреплённый Excel-файл</li>\r\n      <li>Заполните колонку <strong>«Цена»</strong></li>\r\n      <li>При необходимости заполните колонку <strong>«Примечания»</strong> — если нет полного объёма, сроки отличаются или есть другие нюансы</li>\r\n      <li>Отправьте файл ответным письмом</li>\r\n    </ol>\r\n  </div>\r\n\r\n  <p>Спасибо за оперативность!</p>\r\n\r\n  <p style=\"margin-top:30px;padding-top:15px;border-top:1px solid rgb(221,221,221);color:rgb(102,102,102)\">\r\n    С уважением,<br>\r\n    <strong>МеталлСтройГрупп РФ</strong><br>\r\n    Отдел закупок<br>\r\n    <a href=\"mailto:zakup@msgnn.ru\" target=\"_blank\">zakup@msgnn.ru</a>\r\n  </p>\r\n</div>\r\n\r\n</blockquote></div>\r\n",
+          "textPlain": "пт, 16 янв. 2026 г. в 08:55, МеталлСтройГрупп <zakup@msgnn.ru>:\r\n\r\n> Добрый день!\r\n>\r\n> Просим предоставить цены на следующие позиции:\r\n>\r\n> *Заявка №ЗП-20260116-085433987-FAC*\r\n> № Наименование Размер Марка стали Вес, т Кол-во\r\n> 1 Швеллер 27П ст3 3.324 20\r\n> 2 Швеллер гнутый 80х60х4 ст3 1.394 80\r\n> 3 Уголок 80х80х8 ст3 0.174 3\r\n> 4 Уголок 75х75х5 ст3 1.392 40\r\n> ИТОГО: 6.284 т\r\n>\r\n> ⚡ ВАЖНО: Сбор цен заканчивается через 30 минут!\r\n>\r\n> Если отвечаете позже — ваша цена может быть не учтена.\r\n>\r\n> 📋 Как ответить:\r\n>\r\n>    1. Скачайте прикреплённый Excel-файл\r\n>    2. Заполните колонку *«Цена»*\r\n>    3. При необходимости заполните колонку *«Примечания»* — если нет\r\n>    полного объёма, сроки отличаются или есть другие нюансы\r\n>    4. Отправьте файл ответным письмом\r\n>\r\n> Спасибо за оперативность!\r\n>\r\n> С уважением,\r\n> *МеталлСтройГрупп РФ*\r\n> Отдел закупок\r\n> zakup@msgnn.ru\r\n>\r\n",
+          "metadata": {
+            "received": "from postback15b.mail.yandex.net (postback15b.mail.yandex.net [2a02:6b8:c02:900:1:45:d181:da15])\tby mail-notsolitesrv-production-main-550.iva.yp-c.yandex.net (notsolitesrv/Yandex) with LMTPS id hKF3VGk6U7yK-ZiUlHpOE\tfor <zakup@msgnn.ru>; Fri, 16 Jan 2026 10:56:51 +0300",
+            "x-yandex-fwd": "1",
+            "authentication-results": "mail-nwsmtp-mxfront-production-main-91.iva.yp-c.yandex.net; spf=pass (mail-nwsmtp-mxfront-production-main-91.iva.yp-c.yandex.net: domain of gmail.com designates 2a00:1450:4864:20::62a as permitted sender, rule=[ip6:2a00:1450:4000::/36]) smtp.mail=blackoutlamb@gmail.com; dkim=pass header.i=@gmail.com",
+            "x-yandex-spam": "1",
+            "arc-seal": "i=1; a=rsa-sha256; t=1768550210; cv=none;        d=google.com; s=arc-20240605;        b=kX3KX+prABgRC/bM5JUnY+6kukAdvRgYPqFgqI+ER0DG081oilr6qHxDmQdLOtNY9e         tj3Wo8GcLCBvNnJ+VMRj76v489Rv7ILNkMPcQn2yn7eda48+ZWHaVd6+CcgxRz3NhqCj         Epw2vgTVwOWmdWxxmZpb0eO8cu1WEpGEdRAPtseAC4prHB0k/gCm9JFKTOvv1jZ7akD3         s6UA7bUlUVZEww492vhsk0FouLk92TR43K4alyfDt2ymGJxXqYK6ErWWlnQ0M3zYiJty         831QDF+xgWEa+fkFhtr8zNNXTvfdHNoziRd2l8i4mO+hCyz4AbMuEBGK/od2AcPGuTcc         5qrg==",
+            "arc-message-signature": "i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;        h=to:subject:message-id:date:from:in-reply-to:references:mime-version         :dkim-signature;        bh=E+K6ZQO2gnn+o5jj8jYX43j8wVMJhmrFJmIjkCPAaKU=;        fh=/0q7ki2WBg4vr0wqO52nLQK9MFtpPdUKDTf5Tn5vtVA=;        b=PmxoiDQ/J6ayEXdgHABcE5H+F1rSPgayyTNMsTW8n9g+LPrydDiuBflUu6y3FAouV4         MlSZNXZbevzHuuBLHBJgplbwug6A+V9s2ixnTRZ9O9yDMUloI3OLWzq4o75jvk612lGu         X5TLxYHQjm8hCfRKSGrBGiLlSTJggEtWg9qbR6FqEoQaHIHUFDLRM2B3jzbYw7WYTv0i         +KFN19Rp7SjNcZi2pvxv5oNlGnp6dIhkVyZLZM+vyL+Hb96hAmvtU2WJWpKtqvW3MeIR         QS8rgEvessH4PxRhteicGtHDw3+dP3Tg3sm1VXTJZhZxYHrTWQpx+ZrtXhwLl8IA+gtK         Y1wA==;        darn=msgnn.ru",
+            "arc-authentication-results": "i=1; mx.google.com; arc=none",
+            "dkim-signature": "v=1; a=rsa-sha256; c=relaxed/relaxed;        d=gmail.com; s=20230601; t=1768550210; x=1769155010; darn=msgnn.ru;        h=to:subject:message-id:date:from:in-reply-to:references:mime-version         :from:to:cc:subject:date:message-id:reply-to;        bh=E+K6ZQO2gnn+o5jj8jYX43j8wVMJhmrFJmIjkCPAaKU=;        b=Cy9kQBteFRAg3KggAxTRyUcvohOhzLaitqiNRgwqRgV/kEsNrl8EfAEIqzKRdL3X7z         eFX+nvY0lX4S+lEyxEc01TGD1+6U/+X2hr1gF1AdY9fSbh5LsH90ZLRI4NV33Qudf3MY         nIi23fZ0s+wrjusExQGkQb9BRWQncL5hJ35GBP8KrxKGwHB4XzvNHcg9UaqPNaDrpjKv         VXhbO9Fvv/3cPKBczIe2rQvruv5KnladCSkryIrZxawgWKbmLiVxEc44gaUFiiPlGlJd         dk08rQHk6OIz8cczyR2sMiKDOLBrBNkn0hvr8EBsVoLSDJ+gdlfjhr1rqUyJ4Myp3NP9         zXJA==",
+            "x-google-dkim-signature": "v=1; a=rsa-sha256; c=relaxed/relaxed;        d=1e100.net; s=20230601; t=1768550210; x=1769155010;        h=to:subject:message-id:date:from:in-reply-to:references:mime-version         :x-gm-gg:x-gm-message-state:from:to:cc:subject:date:message-id         :reply-to;        bh=E+K6ZQO2gnn+o5jj8jYX43j8wVMJhmrFJmIjkCPAaKU=;        b=CYCd2OC4ZhJemxPuF+HSaw/DBbmF0BAcSd7t0bXTOiEioVGg1Z53z0Nc8h40r1QpUO         ApEbZl0R7lPGWqi3ygP2PmC16utTaPubadMpQ/4uxYGOE63OKhwEpcWiV27xgH3Je+74         PEcrfmyfcnhSM2ZGTCxks79ogQM25gAm9TCDcAedKlyUz2e42ld1N37XRoGLaBKEQh/L         tucGX3V57dujaxr7ZIPND5bwCbF6P+s5hW2PKSki+QldcdrB7MmO71NebT0yErP56kaa         EKPJf6iymruK/MzPTFV5vHhGrXaX39nawuNQFSKxK6YDVPvcb2bA4A7+PGAFa3wzKxcc         lrJQ==",
+            "x-gm-message-state": "AOJu0YzdoaxgrfCDymnubGcD1a//Y6BL/D/2En/G68cJY2DL7A6Q8abd\tMn+HR+1WvjR7RNEjYPm71pQYNWoAKT2x2ZRrreyZW5Mbm56gPOnW6XfigbNI9UjR37PLpw7YIfG\tXvNN3O9wMwNiKf9lfJ8I/umqVYiSsq5fEBqhRYz7UoQ==",
+            "x-gm-gg": "AY/fxX4CmEiZwUOTk8jl3uZagvL5CM0KPVMUL2/ddejUGxsuN64Tk1n7qzRUhoRvn1P\tL9unghqunhnhnPPns950xBaWe7aNJSeu17wWa6JHDjQLbvQekClFv64Y5ldE85RaFX96tyuiagM\tAksN7pIxzCk//nf+CsEghc1mG3hqez1ht5Jw+iEbJTxgTkJF+22hTlnVzNkmxS3GYib6fwNWNh3\t8DMdia9i/l05qfHnCn6EjpcGxt6ZqqHnED6Ssj680IZXpy2qgvvYuOYmn5s4+0xnYUTMU8=",
+            "x-received": "by 2002:a17:907:5c3:b0:b83:a88c:b4e7 with SMTP id a640c23a62f3a-b8793276e25mr174285266b.65.1768550209369; Thu, 15 Jan 2026 23:56:49 -0800 (PST)",
+            "mime-version": "1.0",
+            "references": "<0102019bc5cd1290-c0cda559-e731-4832-be74-33784c8d73e7-000000@eu-west-1.amazonses.com>",
+            "in-reply-to": "<0102019bc5cd1290-c0cda559-e731-4832-be74-33784c8d73e7-000000@eu-west-1.amazonses.com>",
+            "x-gm-features": "AZwV_QjepKie8VW_ovrkA_NgASsW4jxTtiu7v7uSIYPgM57bTat-N550HxsP53o",
+            "message-id": "<CAD4hWkLgMjO456XWM5ptpGEU_9Nm2_g0OoevsitvSqtteeWNYg@mail.gmail.com>",
+            "content-type": "multipart/mixed; boundary=\"000000000000ff8fa006487cae95\"",
+            "return-path": "blackoutlamb@gmail.com",
+            "x-yandex-forward": "f5ad6824ab5919cf625f0631224531c3"
+          },
+          "attributes": {
+            "uid": 5505
+          },
+          "from": "Mikhail Voinskiy <blackoutlamb@gmail.com>",
+          "date": "Fri, 16 Jan 2026 08:56:38 +0100",
+          "subject": "Re: Заказ ЗП-20260116-085433987-FAC | МеталлСтройГрупп",
+          "to": "МеталлСтройГрупп <zakup@msgnn.ru>"
+        },
+        "binary": {
+          "attachment_0": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "fileExtension": "xlsx",
+            "data": "UEsDBBQABgAIAAAAIQBi7p1oXgEAAJAEAAATAAgCW0NvbnRlbnRfVHlwZXNdLnhtbCCiBAIooAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACslMtOwzAQRfdI/EPkLUrcskAINe2CxxIqUT7AxJPGqmNbnmlp/56J+xBCoRVqN7ESz9x7MvHNaLJubbaCiMa7UgyLgcjAVV4bNy/Fx+wlvxcZknJaWe+gFBtAMRlfX41mmwCYcbfDUjRE4UFKrBpoFRY+gOOd2sdWEd/GuQyqWqg5yNvB4E5W3hE4yqnTEOPRE9RqaSl7XvPjLUkEiyJ73BZ2XqVQIVhTKWJSuXL6l0u+cyi4M9VgYwLeMIaQvQ7dzt8Gu743Hk00GrKpivSqWsaQayu/fFx8er8ojov0UPq6NhVoXy1bnkCBIYLS2ABQa4u0Fq0ybs99xD8Vo0zL8MIg3fsl4RMcxN8bZLqej5BkThgibSzgpceeRE85NyqCfqfIybg4wE/tYxx8bqbRB+QERfj/FPYR6brzwEIQycAhJH2H7eDI6Tt77NDlW4Pu8ZbpfzL+BgAA//8DAFBLAwQUAAYACAAAACEAtVUwI/QAAABMAgAACwAIAl9yZWxzLy5yZWxzIKIEAiigAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKySTU/DMAyG70j8h8j31d2QEEJLd0FIuyFUfoBJ3A+1jaMkG92/JxwQVBqDA0d/vX78ytvdPI3qyCH24jSsixIUOyO2d62Gl/pxdQcqJnKWRnGs4cQRdtX11faZR0p5KHa9jyqruKihS8nfI0bT8USxEM8uVxoJE6UchhY9mYFaxk1Z3mL4rgHVQlPtrYawtzeg6pPPm3/XlqbpDT+IOUzs0pkVyHNiZ9mufMhsIfX5GlVTaDlpsGKecjoieV9kbMDzRJu/E/18LU6cyFIiNBL4Ms9HxyWg9X9atDTxy515xDcJw6vI8MmCix+o3gEAAP//AwBQSwMEFAAGAAgAAAAhADaVjb77AgAA2wYAAA8AAAB4bC93b3JrYm9vay54bWykVd1umzAUvp+0d7B8T8FAfoqaVA1JtEjdVK1/N5EqB5xgBTCzTZOo6jPscq9R7XJPkb3RjiFJm+ama1FiYw58fJ/Pdw4np8ssRfdMKi7yDiZHDkYsj0TM81kHX18NrTZGStM8pqnIWQevmMKn3c+fThZCzidCzBEA5KqDE62LwLZVlLCMqiNRsBwiUyEzqmEpZ7YqJKOxShjTWWq7jtO0M8pzXCME8i0YYjrlEeuLqMxYrmsQyVKqgb5KeKG2aFn0FriMynlZWJHICoCY8JTrVQWKURYFo1kuJJ2kIHtJGmgp4deEP3FgcLdvgtDBqzIeSaHEVB8BtF2TPtBPHJuQvS1YHu7B25B8W7J7bnK4YyWb72TV3GE1n8GI82E0AtaqvBLA5r0TrbHj5uLuyZSn7Ka2LqJF8Y1mJlMpRilVehBzzeIObsFSLNjeBVkWvZKnEHVbx56L7e7OzhcSgftZjXWVcHW78bm5CTxxlmomc6pZKHINFtxI+qjdKuwwEWBu9J39KLlkUFNgLZAJI40COlEXVCeolGkHh8H4WoHy8eV8ldI5G/fFIk8FVNf4hS3pYQ38hzFpZCTboLnmVZ+/1g/0ZLA134WWCM5H/XNIwCW9h3RA0uNNtY5gv4l3l0cyIHcPLc9z2v1wYDltcmz53sCzeq2maw0Gvf6wPSSuE3qPIEY2g0jQUiebTBvoDvYhrQehr3S5jRAnKHn8TOPB2RyWmV8N29ijEWx62g1nC/XsCbNEy1uex2IBhgLDoNXealGFbnmsE7AUAe4Y1de+MD5LgC/xiWfKSbqGVwfv8enXfIZwWGbY42O/IFT1TiBWzSiv/L7+tX76+3P9e/1n/QSt2nTXaqMxkoF5kxzFpErk9uGIppFxOUzmRscE2VKfK13NYDAO/PrEP3a8wZnleaFv+a1hy2oPnYbl+S0/bPi9AXFaJj2m+QfLdBHdv6+kXd/efknCl114k21jfwMebD5RSDG9CcGmVrqAO1hzq2CH1v0HAAD//wMAUEsDBBQABgAIAAAAIQCBPpSX8wAAALoCAAAaAAgBeGwvX3JlbHMvd29ya2Jvb2sueG1sLnJlbHMgogQBKKAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACsUk1LxDAQvQv+hzB3m3YVEdl0LyLsVesPCMm0KdsmITN+9N8bKrpdWNZLLwNvhnnvzcd29zUO4gMT9cErqIoSBHoTbO87BW/N880DCGLtrR6CRwUTEuzq66vtCw6acxO5PpLILJ4UOOb4KCUZh6OmIkT0udKGNGrOMHUyanPQHcpNWd7LtOSA+oRT7K2CtLe3IJopZuX/uUPb9gafgnkf0fMZCUk8DXkA0ejUISv4wUX2CPK8/GZNec5rwaP6DOUcq0seqjU9fIZ0IIfIRx9/KZJz5aKZu1Xv4XRC+8opv9vyLMv072bkycfV3wAAAP//AwBQSwMEFAAGAAgAAAAhAGkn3QfNAwAA6QwAABgAAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWyckltrwjAUx98H+w4h7zatOpnFKmMikzEYu73H9NQGc+mSeGPsu++0zgv4IpY2Oc3l9z8n+Q9GG63ICpyX1mQ0iWJKwAibSzPP6OfHpHVPiQ/c5FxZAxndgqej4e3NYG3dwpcAgSDB+IyWIVQpY16UoLmPbAUGZwrrNA/46+bMVw543mzSirXjuMc0l4buCKm7hGGLQgoYW7HUYMIO4kDxgPn7UlZ+T9PiEpzmbrGsWsLqChEzqWTYNlBKtEinc2Mdnymse5N0uSAbh28bv85ephk/U9JSOOttESIks13O5+X3WZ9xcSCd138RJukyBytZX+AR1b4upeTuwGofYZ0rYb0DrD4uly5lntGf+P9pYZ/UTXxs9nO/dDjIJd5wXRVxUGT0IUmfe5QNB41/viSs/UlMAp+9gwIRADUSSmp7zqxd1AunOBQj0TcLaiIXQa7gEZTK6EsfHf7daGCIAuygcBrv1SaNoV8dyaHgSxXe7PoJ5LwMKNuNulho7ZQ0347BC7QoSkcdxP4BAAD//wAAAP//nJbRboJAEEV/xfABIitYayhJAUHxKwgl8ck2Ymz79x1dInNvZR/wCeY4s7Nnd4G4O7btJa8vdRKfP79n5zcv8GbdV33q5GoTyM3xIlfRfOXNfoKwbjYfv3nbNe1Jwov50kvi5pb1Lv+USCf312QR+9ck9puepZoFyDLNDLJcsyWyrWYhskKzCFmp2QrZTrMXZHvN1sgqzV6RHWDugxhfbD+Um2nKzV02CU2l2GMhArYNkHUDZN8AWbjtxNC6lzbMlqESLc/eBat+wgv5kWWdZoalA8vLaZZvW/yakKtUig2WaYYZQNpIOUC2DJC2WWE7WbNlG6ZKO6jEll2w6if8X/JIFkgOp0kO75JpDqkUGyTTwco05J2XQyZLhkw6IcXTTkob5Z0Mo7BjF6ygBSp7GMkEz9E0z9HdMx3fVIqNe9bQ8CMDMtkzZBIs+k54M9swi4ZhWLQLVrZeYJ48M0byQLO89aa8DCVtEEr9phoaWorMlZm74BbK0piFK7N0wZ0L7l2wcsHDCLTy/eGr5A8AAP//AAAA//9cjkEOgjAQRa8y6QFEKGDSAEkXLprGlV4AwlAIwuC0Ro8vmLDQ3X9/8d8vltrhpWY3zB7u2IVSHA8nATy4fs+Blm+bCWgoBJp26rFukTeSAjqisENUFYObibE9MxP7XwT/YOxKoWNlY9C5sjnoRJkEtFRGgpWgU2VSsCnoTJkM7Kqen1ODfA3bqvY3fK/3YrGaoj9V9CIefY8Yqg8AAAD//wMAUEsDBBQABgAIAAAAIQAwD4hr7QYAAN4dAAATAAAAeGwvdGhlbWUvdGhlbWUxLnhtbOxZS28bNxC+F+h/IPaeWLIlxzYiB5YsJW3ixLCVFDlSu9QuY+5yQVK2dSuSY4ECRdOilwK99VC0DZAAvaS/xm2KNgXyFzokV6ulRfmVBH1FB3sf3wznzRnu1WuHKUP7REjKs1ZQv1wLEMlCHtEsbgV3+71LKwGSCmcRZjwjrWBMZHBt/f33ruI1lZCUIKDP5BpuBYlS+drCggzhMZaXeU4yeDfkIsUKbkW8EAl8AHxTtrBYqy0vpJhmAcpwCmzvDIc0JKivWQbrE+ZdBreZkvpByMSuZk0cCoON9uoaIceywwTax6wVwDoRP+iTQxUghqWCF62gZn7BwvrVBbxWEDE1h7ZC1zO/gq4giPYWzZoiHpSL1nuN1SubJX8DYGoW1+12O916yc8AcBiCplaWKs9Gb6XenvCsgOzlLO9OrVlruPgK/6UZmVfb7XZztZDFMjUge9mYwa/Ulhsbiw7egCy+OYNvtDc6nWUHb0AWvzyD711ZXW64eANKGM32ZtDaob1ewb2EDDm74YWvAHylVsCnKIiGMrr0EkOeqXmxluIHXPQAoIEMK5ohNc7JEIcQxR2cDgTFegG8RnDljX0UyplHei0kQ0Fz1Qo+zDFkxJTfq+ffv3r+FL16/uTo4bOjhz8dPXp09PBHy8shvIGzuEr48tvP/vz6Y/TH029ePv7Cj5dV/K8/fPLLz5/7gZBBU4lefPnkt2dPXnz16e/fPfbANwQeVOF9mhKJbpMDtMNT0M0YxpWcDMT5KPoJpg4FToC3h3VXJQ7w9hgzH65NXOPdE1A8fMDroweOrLuJGCnqWflmkjrALc5ZmwuvAW7qtSoW7o+y2L+4GFVxOxjv+9bu4MxxbXeUQ9WcBKVj+05CHDG3Gc4UjklGFNLv+B4hHu3uU+rYdYuGgks+VOg+RW1MvSbp04ETSFOiGzQFv4x9OoOrHdts3UNtznxab5J9FwkJgZlH+D5hjhmv45HCqY9lH6esavBbWCU+IXfHIqziulKBp2PCOOpGREofzR0B+lacfhNDvfK6fYuNUxcpFN3z8byFOa8iN/leJ8Fp7pWZZkkV+4HcgxDFaJsrH3yLuxmi78EPOJvr7nuUOO4+vRDcpbEj0jRA9JuR8PjyOuFuPo7ZEBNTZaCkO5U6pdlJZZtRqNvvyvZkH9uATcyXPDeOFet5uH9hid7Eo2ybQFbMblHvKvS7Ch385yv0vFx+83V5WoqhSk97bdN5p3Mb7yFlbFeNGbklTe8tYQOKevDQDAVmMiwHsTyBy6LNd3CxwIYGCa4+oirZTXAOfXvdjJGxLFjHEuVcwrxoHpuBlhzjbUZUCq27mTabeg6xlUNitcUj+3ipOm+WbMz0GZuZdrLQkmZw1sWWrrzeYnUr1VyzuarVjWimKDqqlSqDD2dVg4elNaGzQdAPgZWXYezXssO8gxmJtN3tLD5xi176Lbmo0NoqkuCIWBc5jyuuqxvfTUJoEl0e153PmtVAOV0IExaTcfXCRp4wmBpZp92xbGJZNbdYhg5awWpzsRmgEOetYAiTLlymOThN6l4QsxiOi0IlbNSemosm2qYar/qjqg6HFzaRZqLKSeNcSLWJZWJ9aF4VrmKZmcuN/IvNhg62N6OADdQLSLG0AiHyt0kBdnRdS4ZDEqqqsytPzLGFARSVkI8UEbtJdIAGbCR2MLgfbKr1iaiEAwuT0PoGTte0tc0rt7YWda16pmVw9jlmeYKLaqlPZyYZZ+Em30oZzJ2V1ogHunllN8qdXxWd8W9KlWoY/89U0dsBnCAsRdoDIRzuCox0vrYCLlTCoQrlCQ17As69TO2AaIETWngNxocjZvNfkH393+ac5WHSGgZBtUNjJChsJyoRhGxDWTLRdwqzerH1WJasYGQiqiKuzK3YA7JPWF/XwGVdgwOUQKibalKUAYM7Hn/ufZFBg1j3KP/UxsUm83l3d7252w7J0p+xlWhUin5lK1j1tzMnNxhTEc6yAcvpcrZizWi82Jy78+hWrdrP5HAOhPQf2P+oCJn9XqE31D7fgdqK4PODFR5BVF/SVQ0iSBdIezWAvsc+tMGkWdkViub0LXZB5bqQpRdpVM9p7LKJcpdzcvHkvuZ8xi4s7Ni6GkceU4Nnj6eobo8mc4hxjPnQVf0WxQcPwNGbcOo/YvbrlMzhzuRBvi1MdA14NC4umbQbro06PcPYJmWHDBGNDifzx7FBo/jYUzY2gDYjEgRaSbjkGxpcQh2YBandLUvixdOJSwqzMpTsktgcqPkYwPexQmQ92pmVdTNntdZXE0ux7HVMdgbhWeYzmXfOOqvJ7KB4oqMuYDJ1eLLJCkuB8WYDD75wCgzDqf1eBZuOLSomZNf/AgAA//8DAFBLAwQUAAYACAAAACEAdJn9lc4CAABwBgAADQAAAHhsL3N0eWxlcy54bWykVUtu2zAQ3RfoHQTuFUqK5dqGpKCOIyBAWhRICnRLS5RNhB+Boly5RddZ5A69Q5dd9A7OjTqUZFtBirZINuZwNHzzZt6Qjs4awZ0N1RVTMkb+iYccKjOVM7mK0ceb1J0gpzJE5oQrSWO0pRU6S16/iiqz5fR6TalxAEJWMVobU84wrrI1FaQ6USWV8KVQWhADW73CVakpySt7SHAceN4YC8Ik6hBmIvsfEEH0bV26mRIlMWzJODPbFgs5IptdrqTSZMmBauOPSOY0/lgHTqP3SVrvkzyCZVpVqjAngItVUbCMPqU7xVNMsiMSID8PyQ+xFzyqvdHPRBphTTfMyoeSqFDSVE6mamlATCBqWzC7leqzTO0n6+yikqj64mwIB0+AcBJliivtGJAOOudbjySCdhHnhLOlZtZZEMH4tnO351q1+zjBoPc2Clse/VLBIcb5gVVgCYAjiUA+Q7VMYeP09s22hPQSJq2DaeP+Eb3SZOsH4eAAbhMm0VLpHCb72I+9K4k4LQwQ1Wy1tqtRJfwulTGgfhLljKyUJNyW0oEcDCgno5xf2+n/VDzCbgpH1iIV5jKPEdwj24S9CYX0ZofXbSz+EK3DfjGs0xR9MlKWfPu+Fkuq0/Ye9tq2WSHPoJhHpRxIOXYKYrT7vvvxcP9wt/v1cL/7CXO1T7CsGTdM/qEcwM6bY4M8q4+xF7Nt3SEb9CmnBam5uTl8jNHRfkdzVovpIeoD2yjTQsToaHdRI5uDNuaqguGD1ak1i9HXi/mb6eIiDdyJN5+4o1MautNwvnDD0fl8sUinXuCdfxs8Dy94HNrXLIng2s0qDk+I7ovtS7w++mI02FzZMWwvHQbaQ+7TYOy9DX3PTU893x2NycSdjE9DNw39YDEezS/CNBxwD5/5iHjY97vnyJIPZ4YJypnca7VXaOgFkWD7lyJsKa0S+PhXkfwGAAD//wMAUEsDBBQABgAIAAAAIQA/TvEyuwEAAKMDAAAUAAAAeGwvc2hhcmVkU3RyaW5ncy54bWxsU81O20AQvlfiHVZ7Bq/jkMRFtjkg8QTlAaxkIZbidZrdILhBALUSByRAqEL8VK1UcbRSECkmPMPsK/AkzCYSFV7LmsPM9803szPjYHUn7ZFtPpBJJkJac1xKuGhnnURshXTjy/qST4lUsejEvUzwkO5ySVejhU+BlIpgrpAh7SrVX2FMtrs8jaWT9blAZDMbpLFCd7DFZH/A447scq7SHvNct8nSOBGUtLOhUCFt1CgZiuTrkK/NA55Po0AmUaCi18OLgKkoYMadh+AacpjAMzzAFF5gjN4U/QeL9xORR8PTexZ2BbnegyfIid7XIyQWMLFIp5i6v0j0yEIusXCxhLVfEP5eQTiHwpkhiwSerfQ7mGD1CfadV+KzbNPSvLlKzp/Z+3NL+3ambF79bT4ZfVJRf4zZBX4Vs/FacFvOMH3Uy8G6U/eWS0H2cVV3OKL3QgT+wlQf6JE+hn9lMd/VR020smBUc+qfrSD8Ri1cAdpTlZJR88uA69RallKroY+MNcpsU9ezJvcDfsENnMHNShlqOp5v9znFCY+IWTQeGt5bgTu5t29VH+pjYzD+L8vwJ4veAAAA//8DAFBLAwQUAAYACAAAACEAuST97ioBAAD0AQAAEQAIAWRvY1Byb3BzL2NvcmUueG1sIKIEASigAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbJFLT8MwEITvSPyHyPfESaoGZCWpVFBPrYREEYibsbepRfyQ7ZLm3+OkJZTH0ZrZb2fW5eIo2+gDrBNaVShLUhSBYpoL1VToabuKb1HkPFWctlpBhXpwaFFfX5XMEKYtPFhtwHoBLgok5QgzFdp7bwjGju1BUpcEhwriTltJfXjaBhvK3mkDOE/TAkvwlFNP8QCMzUREZyRnE9IcbDsCOMPQggTlHc6SDH97PVjp/h0YlQunFL43odM57iWbs5M4uY9OTMau65JuNsYI+TP8slk/jlVjoYZbMUD1cJ+WOr8Jp9wJ4Mu+XrahtD74aE3lW4n/GkrOxohEnoeisJWcMn5Jz7O7++0K1XmaF3GaxVmxTW/IvCD5/LXEvwH1uObnP9WfAAAA//8DAFBLAwQUAAYACAAAACEALLSWj5oBAAAEAwAAEAAIAWRvY1Byb3BzL2FwcC54bWwgogQBKKAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACckr1u2zAUhfcAfQeBe0w5CYLCoGgETooMKWrATnaWurKJ0KRA3gh2t3bt0DFDXiLIFPQp5DfqldQ4cpOp2/05OPx4SDFer2xSQYjGu4wNBylLwGmfG7fI2PX80+FHlkRULlfWO8jYBiIbyw8HYhp8CQENxIQsXMzYErEccR71ElYqDmjtaFP4sFJIbVhwXxRGw7nXdytwyI/S9JTDGsHlkB+WO0PWOY4q/F/T3OuGL97MNyUBS3FWltZohXRL+dno4KMvMLlYa7CC95eC6Gag74LBjUwF77dippWFCRnLQtkIgr8OxCWoJrSpMiFKUeGoAo0+JNF8o9iOWPJVRWhwMlapYJRDwmpkXdPWtowYZP1QP2+/b39sfwpOgm7Yln1tvzYnctgKqNgXNgYdCC32EecGLcQvxVQFfId42CduGTrev4z39eP2V/1U/64f31C2F6fz/jnhyrjbeF3O/blCeElwfyhmSxUgp9B3Ce8G4pLCC7YxmSyVW0D+onm7aN77pvvUcng6SI9TesreTPDX7yv/AAAA//8DAFBLAQItABQABgAIAAAAIQBi7p1oXgEAAJAEAAATAAAAAAAAAAAAAAAAAAAAAABbQ29udGVudF9UeXBlc10ueG1sUEsBAi0AFAAGAAgAAAAhALVVMCP0AAAATAIAAAsAAAAAAAAAAAAAAAAAlwMAAF9yZWxzLy5yZWxzUEsBAi0AFAAGAAgAAAAhADaVjb77AgAA2wYAAA8AAAAAAAAAAAAAAAAAvAYAAHhsL3dvcmtib29rLnhtbFBLAQItABQABgAIAAAAIQCBPpSX8wAAALoCAAAaAAAAAAAAAAAAAAAAAOQJAAB4bC9fcmVscy93b3JrYm9vay54bWwucmVsc1BLAQItABQABgAIAAAAIQBpJ90HzQMAAOkMAAAYAAAAAAAAAAAAAAAAABcMAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwECLQAUAAYACAAAACEAMA+Ia+0GAADeHQAAEwAAAAAAAAAAAAAAAAAaEAAAeGwvdGhlbWUvdGhlbWUxLnhtbFBLAQItABQABgAIAAAAIQB0mf2VzgIAAHAGAAANAAAAAAAAAAAAAAAAADgXAAB4bC9zdHlsZXMueG1sUEsBAi0AFAAGAAgAAAAhAD9O8TK7AQAAowMAABQAAAAAAAAAAAAAAAAAMRoAAHhsL3NoYXJlZFN0cmluZ3MueG1sUEsBAi0AFAAGAAgAAAAhALkk/e4qAQAA9AEAABEAAAAAAAAAAAAAAAAAHhwAAGRvY1Byb3BzL2NvcmUueG1sUEsBAi0AFAAGAAgAAAAhACy0lo+aAQAABAMAABAAAAAAAAAAAAAAAAAAfx4AAGRvY1Byb3BzL2FwcC54bWxQSwUGAAAAAAoACgCAAgAATyEAAAAA",
+            "directory": "=?UTF-8?B?0JfQsNC",
+            "fileName": "0YDQvtGBXzE2LjAxLjI2X9CX0J8tMjAyNjAxMTYtMDg1NDMzOTg3Lnhsc3g=?=",
+            "fileSize": "9.19 kB"
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "IMAP: New Email": {
+      "main": [
+        [
+          {
+            "node": "Code: Check Request ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Check Request ID": {
+      "main": [
+        [
+          {
+            "node": "IF: Has Request ID?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Has Request ID?": {
+      "main": [
+        [
+          {
+            "node": "IF: Has Excel?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Request ID - Ignore",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Has Excel?": {
+      "main": [
+        [
+          {
+            "node": "Spreadsheet: Read Excel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code: No Excel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Spreadsheet: Read Excel": {
+      "main": [
+        [
+          {
+            "node": "Code: Parse Prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Parse Prices": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Save Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: No Excel": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Save Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Save Response": {
+      "main": [
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "e6091799-538c-4109-965f-b40b38854f07",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e053b61b8b3bdff69a323dc7c626e5598b37038308beed9b02f6dd362745fcdd"
+  },
+  "id": "VnK1fPELgr2k2C9j",
+  "tags": []
+}

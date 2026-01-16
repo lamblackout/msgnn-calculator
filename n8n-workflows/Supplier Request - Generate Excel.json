@@ -1,0 +1,165 @@
+{
+  "name": "Supplier Request - Generate Excel",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "supplier-request",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "0b52f19e-411d-4565-8da0-619c11eb4101",
+      "name": "Webhook: Supplier Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        0
+      ],
+      "webhookId": "a44b8b75-a30b-4aae-8ca9-35c1f6039da4"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Получаем данные из webhook (данные в body)\nconst webhookData = $input.first().json;\nconst body = webhookData.body || webhookData;\nconst requestId = body.request_id || body.requestId;\nconst items = body.items || [];\nconsole.log('📥 Получено позиций:', items.length);\nconsole.log('📥 Request ID:', requestId);\n\n// Формируем строки для Excel (с колонкой Примечания)\nconst excelRows = items.map((item, idx) => {\n  return {\n    '№': idx + 1,\n    'Наименование': item.metal_type || item.metal_name || '',\n    'Размер': item.size || '',\n    'Марка стали': item.steel_grade || '',\n    'Вес, т': item.weight ? Number(item.weight).toFixed(3) : '',\n    'Кол-во, шт': item.pieces || '',\n    'Дл. шт, м': item.length_per_piece || '',\n    'Ширина, м': item.width || '',\n    'Дл. листа, м': item.length_sheet || '',\n    'Цена': '',\n    'Примечания': ''\n  };\n});\n\n// Считаем общий вес\nconst totalWeight = items.reduce((sum, item) => sum + (parseFloat(item.weight) || 0), 0);\n\n// Добавляем итоговую строку\nexcelRows.push({\n  '№': '',\n  'Наименование': 'ИТОГО:',\n  'Размер': '',\n  'Марка стали': '',\n  'Вес, т': totalWeight ? Number(totalWeight).toFixed(3) : '',\n  'Кол-во, шт': '',\n  'Дл. шт, м': '',\n  'Ширина, м': '',\n  'Дл. листа, м': '',\n  'Цена': '',\n  'Примечания': ''\n});\n\nconsole.log('📊 Сформировано строк для Excel:', excelRows.length);\n\n// Возвращаем каждую строку как отдельный item\nreturn excelRows.map((row, index) => ({\n  json: row,\n  pairedItem: { item: 0 }\n}));"
+      },
+      "id": "9a653c58-bcb3-4099-a6ce-58dae03d7cfb",
+      "name": "Code: Prepare Excel Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toFile",
+        "fileFormat": "xlsx",
+        "binaryPropertyName": "excelFile",
+        "options": {
+          "fileName": "={{ 'Запрос_поставщикам_' + $('Webhook: Supplier Request').first().json.requestId + '.xlsx' }}",
+          "headerRow": true,
+          "sheetName": "Заявка"
+        }
+      },
+      "id": "4998fafe-1c16-40c9-b415-b18f043f87fc",
+      "name": "Create Excel File",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [
+        432,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Получаем данные из webhook\nconst webhookData = $('Webhook: Supplier Request').first().json;\nconst body = webhookData.body || webhookData;\nconst requestId = body.request_id || body.requestId;\nconst items = body.items || [];\nconst totals = body.totals || {};\n\n// Считаем общий вес\nconst calculatedTotalWeight = items.reduce((sum, item) => sum + (parseFloat(item.weight) || 0), 0);\nconst finalTotalWeight = totals.weight || calculatedTotalWeight;\n\n// Формируем дату для имени файла (ДД.ММ.ГГ)\nconst now = new Date();\nconst day = String(now.getDate()).padStart(2, '0');\nconst month = String(now.getMonth() + 1).padStart(2, '0');\nconst year = String(now.getFullYear()).slice(-2);\nconst dateStr = `${day}.${month}.${year}`;\n\n// Формируем понятное имя файла\nconst excelFilename = `Запрос_${dateStr}_${requestId || 'заявка'}.xlsx`;\n\n// Получаем Excel в base64 из binary данных\nlet excelBase64 = '';\n\ntry {\n  const binaryData = $input.first().binary;\n  console.log('Binary data keys:', Object.keys(binaryData || {}));\n  \n  if (binaryData) {\n    const binaryKey = Object.keys(binaryData)[0];\n    if (binaryKey && binaryData[binaryKey]) {\n      excelBase64 = binaryData[binaryKey].data;\n      console.log('✅ Excel base64 извлечён, длина:', excelBase64.length);\n    }\n  }\n} catch (error) {\n  console.log('❌ Ошибка извлечения Excel:', error.message);\n}\n\nconsole.log('📄 Имя файла:', excelFilename);\n\n// Формируем ответ с base64 внутри JSON\nreturn [{\n  json: {\n    success: true,\n    request_id: requestId,\n    timestamp: body.timestamp,\n    total_weight: Number(finalTotalWeight).toFixed(3),\n    items_count: items.length,\n    excel_base64: excelBase64,\n    excel_filename: excelFilename,\n    message: 'Запрос успешно сформирован'\n  }\n}];"
+      },
+      "id": "48e2e457-b1b3-47a4-9569-58efab0c5401",
+      "name": "Code: Prepare Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "0cd635cc-1662-4ee9-b507-beff23e7e8ef",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        864,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Supplier Request - Generate Excel\n\n**Входные данные:**\n- requestId: номер заявки\n- items: массив позиций\n- totalWeight: общий вес\n- totalPositions: кол-во позиций\n\n**Выходные данные:**\n- JSON с данными заявки\n- Excel файл для скачивания",
+        "height": 656
+      },
+      "id": "5368fa03-67c2-42ad-8a57-34246d2572da",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -592,
+        -256
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: Supplier Request": {
+      "main": [
+        [
+          {
+            "node": "Code: Prepare Excel Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Prepare Excel Data": {
+      "main": [
+        [
+          {
+            "node": "Create Excel File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Excel File": {
+      "main": [
+        [
+          {
+            "node": "Code: Prepare Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Prepare Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "a97bbb6a-e437-476c-9632-1e762d2125ea",
+  "meta": {
+    "instanceId": "e053b61b8b3bdff69a323dc7c626e5598b37038308beed9b02f6dd362745fcdd"
+  },
+  "id": "Fh9ttcbDvCBHgJxz",
+  "tags": []
+}
