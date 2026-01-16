@@ -1081,6 +1081,28 @@
             alert('Ошибка: калькулятор не загружен. Проверьте консоль.');
             return;
         }
+
+        // Выводим версию калькулятора для диагностики
+        console.log('✅ calculator.browser.js загружен');
+        console.log('📦 Тестовый расчёт Швеллера гнутого 80х60х4:');
+        try {
+            const testDB = { metals: state.metalsDB };
+            const testResult = window.calculateMetal({
+                metalType: 'shveller_gnyt',
+                size: '80х60х4',
+                length: 240
+            }, testDB);
+            if (testResult.success) {
+                console.log(`   ✅ Коэффициент: ${testResult.weightPerMeter} кг/м`);
+                console.log(`   ✅ Вес: ${testResult.weight} т`);
+                console.log(`   ✅ Длина: ${testResult.length} м`);
+                console.log(`   ✅ Штуки: ${testResult.pieces} шт`);
+            } else {
+                console.log(`   ❌ Ошибка: ${testResult.error}`);
+            }
+        } catch (e) {
+            console.log(`   ❌ Исключение: ${e.message}`);
+        }
         console.log('✅ calculateMetal доступна');
 
         await loadMetalsDatabase();
@@ -3110,7 +3132,31 @@
                     // Получаем данные из базы металлов
                     const metalDB = state.metalsDB?.[item.metal_key] || {};
 
-                    return {
+                    // ✅ ОТЛАДКА для швеллера гнутого
+                    if (item.metal_key === 'shveller_gnyt' || item.metal_key === 'shveller_gnyt_ocink') {
+                        console.log(`🔍 Швеллер гнутый [${index}] ПЕРЕД ОТПРАВКОЙ:`, {
+                            metal_key: item.metal_key,
+                            metal_name: item.metal_name,
+                            size: item.size,
+                            weight_raw: item.weight,
+                            weight_type: typeof item.weight,
+                            weight_value: item.weight === null ? 'NULL' : item.weight === undefined ? 'UNDEFINED' : item.weight === '' ? 'EMPTY_STRING' : item.weight,
+                            weight_parsed: parseFloat(item.weight),
+                            pieces_raw: item.pieces,
+                            pieces_type: typeof item.pieces,
+                            pieces_value: item.pieces === null ? 'NULL' : item.pieces === undefined ? 'UNDEFINED' : item.pieces === '' ? 'EMPTY_STRING' : item.pieces,
+                            pieces_parsed: parseInt(item.pieces),
+                            length_raw: item.length,
+                            length_type: typeof item.length,
+                            length_parsed: parseFloat(item.length),
+                            total_length: item.total_length,
+                            original_weight: item.original_weight,
+                            steel_grade: item.steel_grade,
+                            length_per_piece: item.length_per_piece
+                        });
+                    }
+
+                    const mappedItem = {
                         // Номер позиции
                         position: index + 1,
 
@@ -3142,6 +3188,18 @@
                         // Исходный текст позиции
                         raw_text: item.raw_text || ''
                     };
+
+                    // ✅ ОТЛАДКА для швеллера гнутого - что отправляется
+                    if (item.metal_key === 'shveller_gnyt' || item.metal_key === 'shveller_gnyt_ocink') {
+                        console.log(`📤 Швеллер гнутый [${index}] ОТПРАВЛЯЕТСЯ В WEBHOOK:`, {
+                            weight: mappedItem.weight,
+                            total_length: mappedItem.total_length,
+                            pieces: mappedItem.pieces,
+                            length_per_piece: mappedItem.length_per_piece
+                        });
+                    }
+
+                    return mappedItem;
                 }),
                 totals: {
                     weight: 0, // Будет пересчитано ниже
