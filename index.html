@@ -3512,7 +3512,6 @@
         const container = document.getElementById('active-requests-container');
         const list = document.getElementById('active-requests-list');
         const showMoreBtn = document.getElementById('btn-show-more-requests');
-        const hiddenCount = document.getElementById('hidden-requests-count');
 
         if (!container || !list) {
             console.error('❌ Контейнер active-requests-container не найден!');
@@ -3535,11 +3534,10 @@
         // Показываем/скрываем кнопку "Показать ещё"
         if (hiddenNum > 0 && !showAllRequests) {
             showMoreBtn.style.display = 'block';
-            hiddenCount.textContent = hiddenNum;
-            showMoreBtn.textContent = `Показать ещё (${hiddenNum})`;
+            showMoreBtn.innerHTML = `Показать ещё (<span id="hidden-requests-count">${hiddenNum}</span>)`;
         } else if (showAllRequests && activeRequests.length > MAX_VISIBLE_REQUESTS) {
             showMoreBtn.style.display = 'block';
-            showMoreBtn.textContent = 'Скрыть';
+            showMoreBtn.innerHTML = 'Скрыть';
         } else {
             showMoreBtn.style.display = 'none';
         }
