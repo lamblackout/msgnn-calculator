@@ -508,9 +508,24 @@ Frontend → /get-supplier-summary?request_id=...
 
 ---
 
+## История решенных проблем
+
+### ✅ Отображение названий поставщиков в сводке (2026-01-28) - РЕШЕНО
+
+**Проблема:** В Excel сводке цен колонки поставщиков отображались непонятно (например, "smp1 (цена)").
+
+**Решение:** Теперь всегда показывается полный email адрес поставщика (например, "smp1@metalsnab.ru (цена)").
+
+**Изменено:** Workflow "Get Supplier Summary v2" - узел "Code: Build Summary" теперь использует `supplier.email` вместо `supplier.name`.
+
+**Подробности:** См. раздел "ТЕКУЩИЕ ПРОБЛЕМЫ" (помечен как ✅) в [CLAUDE_HANDOFF.md](CLAUDE_HANDOFF.md)
+
+---
+
 ## Связанные файлы
 
 - [CLAUDE.md](CLAUDE.md) - общая документация проекта
+- [CLAUDE_HANDOFF.md](CLAUDE_HANDOFF.md) - детальный лог изменений и текущие проблемы
 - [README.md](README.md) - описание для пользователей
 - [index.html](index.html) - frontend код
 - [n8n-workflows/](n8n-workflows/) - JSON файлы workflows
