@@ -449,10 +449,53 @@
             color: #721c24;
         }
 
+        .suppliers-toggle-btn {
+            background: none;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            color: #555;
+            cursor: pointer;
+            margin-top: 8px;
+            width: 100%;
+            text-align: left;
+            transition: background 0.2s;
+        }
+        .suppliers-toggle-btn:hover {
+            background: #f0f0f0;
+        }
         .suppliers-list {
             margin-top: 4px;
             font-size: 11px;
             color: #666;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .suppliers-list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 6px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .suppliers-list-item:last-child {
+            border-bottom: none;
+        }
+        .suppliers-list-item .supplier-name {
+            font-weight: 500;
+            color: #333;
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .suppliers-list-item .supplier-email {
+            color: #2563eb;
+            font-size: 10px;
+            margin-left: 8px;
+            white-space: nowrap;
         }
 
         /* ============================================ */
@@ -3465,6 +3508,7 @@
             collect_at: result.collect_at,
             collect_at_formatted: result.collect_at_formatted,
             suppliers_count: result.suppliers_count,
+            suppliers: result.suppliers || [],
             created_at: new Date().toISOString(),
             status: 'pending'
         };
@@ -3503,6 +3547,19 @@
 
     // Показать/скрыть дополнительные запросы
     let showAllRequests = false;
+    function toggleSuppliersList(requestId) {
+        const list = document.getElementById(`suppliers-${requestId}`);
+        const btn = list?.previousElementSibling;
+        if (!list) return;
+        const isHidden = list.style.display === 'none';
+        list.style.display = isHidden ? 'block' : 'none';
+        if (btn) {
+            const req = activeRequests.find(r => r.request_id === requestId);
+            const count = req?.suppliers?.length || 0;
+            btn.textContent = isHidden ? `📋 Поставщики (${count}) ▲` : `📋 Поставщики (${count}) ▼`;
+        }
+    }
+
     function toggleMoreRequests() {
         showAllRequests = !showAllRequests;
         renderActiveRequests();
@@ -3590,6 +3647,19 @@
                             ${downloadBtnText}
                         </button>
                     </div>
+                    ${(req.suppliers && req.suppliers.length > 0) ? `
+                    <button class="suppliers-toggle-btn" onclick="toggleSuppliersList('${req.request_id}')">
+                        📋 Поставщики (${req.suppliers.length}) ▼
+                    </button>
+                    <div id="suppliers-${req.request_id}" class="suppliers-list" style="display: none;">
+                        ${req.suppliers.map(s => `
+                            <div class="suppliers-list-item">
+                                <span class="supplier-name" title="${(s.name || '').replace(/"/g, '&quot;')}">${s.name || 'Без названия'}</span>
+                                <a class="supplier-email" href="mailto:${s.email}" title="${s.email}">${s.email}</a>
+                            </div>
+                        `).join('')}
+                    </div>
+                    ` : ''}
                     <div id="result-${req.request_id}" class="request-card-result" style="display: none;"></div>
                 </div>
             `;
