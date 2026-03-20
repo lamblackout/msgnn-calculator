@@ -795,6 +795,17 @@
                 <span class="excel-hint">Откройте файл чтобы убедиться что всё верно</span>
             </div>
 
+            <!-- Имя менеджера -->
+            <div style="margin-bottom: 12px;">
+                <label for="manager-name" style="display: block; font-weight: 500; margin-bottom: 6px; color: #374151;">
+                    👤 Имя менеджера (будет в теме письма):
+                </label>
+                <input type="text" id="manager-name"
+                    placeholder="Например: Карина"
+                    style="width: 250px; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; font-family: inherit;"
+                    oninput="localStorage.setItem('metalCalc_managerName', this.value)">
+            </div>
+
             <!-- Комментарий менеджера -->
             <div class="manager-comment-section" style="margin-bottom: 16px;">
                 <label for="manager-comment" style="display: block; font-weight: 500; margin-bottom: 6px; color: #374151;">
@@ -1115,6 +1126,13 @@
         loadActiveRequests();
         console.log('📦 activeRequests после загрузки:', activeRequests);
         renderActiveRequests();
+
+        // Восстанавливаем имя менеджера из localStorage
+        const savedManagerName = localStorage.getItem('metalCalc_managerName');
+        if (savedManagerName) {
+            const nameInput = document.getElementById('manager-name');
+            if (nameInput) nameInput.value = savedManagerName;
+        }
 
         localStorage.removeItem('metalCalcState'); // Чистая страница при загрузке
 
@@ -3364,8 +3382,9 @@
         const originalContent = btn.innerHTML;
         btn.innerHTML = `<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span> Отправка...`;
 
-        // Получаем комментарий менеджера
+        // Получаем комментарий и имя менеджера
         const managerComment = document.getElementById('manager-comment')?.value?.trim() || '';
+        const managerName = document.getElementById('manager-name')?.value?.trim() || '';
 
         const payload = {
             category: category,
@@ -3376,7 +3395,8 @@
             timestamp: new Date().toISOString(),
             excel_base64: window.currentExcelBase64 || null,
             excel_filename: window.currentExcelFilename || null,
-            manager_comment: managerComment
+            manager_comment: managerComment,
+            manager_name: managerName
         };
 
         console.log(`📤 Отправка запроса поставщикам (${categoryName}):`, payload);
@@ -3390,6 +3410,7 @@
 
             if (response.ok) {
                 const result = await response.json();
+                result.manager_name = managerName; // Сохраняем имя менеджера для карточки
                 console.log('✅ Ответ от сервера:', result);
 
                 // Отмечаем кнопку как отправленную
@@ -3509,6 +3530,7 @@
             collect_at_formatted: result.collect_at_formatted,
             suppliers_count: result.suppliers_count,
             suppliers: result.suppliers || [],
+            manager_name: result.manager_name || '',
             created_at: new Date().toISOString(),
             status: 'pending'
         };
@@ -3631,7 +3653,7 @@
                     <div class="request-card-header">
                         <div class="request-card-icon">📊</div>
                         <div class="request-card-info">
-                            <h5>${req.request_id}</h5>
+                            <h5>${req.request_id}${req.manager_name ? ' (' + req.manager_name + ')' : ''}</h5>
                             <p id="status-${req.request_id}">✅ Отправлено: ${req.category_name}</p>
                         </div>
                         <div id="badge-${req.request_id}" class="request-card-badge ${badgeClass}">
