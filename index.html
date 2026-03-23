@@ -2277,16 +2277,35 @@
                         console.log(`  🔧 Арматура d=${sizeNum}: ГОСТ=${gostCoef} кг/м, формула=${formulaCoef.toFixed(4)} кг/м, коррекция=${correctionFactor.toFixed(4)}`);
 
                         // Корректируем все значения
-                        if (result.length !== null) {
-                            result.length = Math.round(result.length / correctionFactor * 100) / 100;
-                        }
-                        if (result.pieces !== null) {
-                            // Пересчитываем штуки от скорректированной длины (округление ВВЕРХ)
-                            const lengthPerPiece = getActualLengthPerPiece(item);
-                            result.pieces = Math.ceil(result.length / lengthPerPiece);
-                            result.length = result.pieces * lengthPerPiece;
-                            // Пересчитываем вес от фактических штук
+                        const lengthPerPiece = getActualLengthPerPiece(item);
+
+                        if (changedField === 'pieces') {
+                            // Пользователь задал штуки — уважаем его значение
+                            const userPieces = parseInt(item.pieces);
+                            result.pieces = userPieces;
+                            result.length = userPieces * lengthPerPiece;
                             result.weight = Math.round(result.length * gostCoef / 1000 * 1000) / 1000;
+                        } else if (changedField === 'weight') {
+                            // Пользователь задал вес — пересчитываем длину и штуки (округление ВНИЗ)
+                            const userWeight = parseFloat(item.weight);
+                            result.length = Math.round(userWeight * 1000 / gostCoef * 100) / 100;
+                            if (result.pieces !== null) {
+                                result.pieces = Math.floor(result.length / lengthPerPiece) || 1;
+                                result.length = result.pieces * lengthPerPiece;
+                                result.weight = Math.round(result.length * gostCoef / 1000 * 1000) / 1000;
+                            } else {
+                                result.weight = userWeight;
+                            }
+                        } else {
+                            // Другие поля (размер, марка) — стандартная логика
+                            if (result.length !== null) {
+                                result.length = Math.round(result.length / correctionFactor * 100) / 100;
+                            }
+                            if (result.pieces !== null) {
+                                result.pieces = Math.ceil(result.length / lengthPerPiece);
+                                result.length = result.pieces * lengthPerPiece;
+                                result.weight = Math.round(result.length * gostCoef / 1000 * 1000) / 1000;
+                            }
                         }
                     }
                 }
