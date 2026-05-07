@@ -989,8 +989,36 @@
     // Типы с выбором стандарта/варианта (профнастил, рельсы, лист ПВ, лист рифленый, лист окраш., лист оцинк.)
     const TYPES_WITH_STANDARDS = ['profnastil_okrash', 'profnastil_ocink', 'rels', 'sheet_pv', 'sheet_pv_galv', 'sheet_checkered', 'sheet_painted', 'sheet_galv'];
 
+    // Типы с выбором И стандарта, И марки стали (для оцинкованных и окрашенных листов нужны обе)
+    const TYPES_WITH_STANDARD_AND_STEEL = ['sheet_galv', 'sheet_painted'];
+
     // Типы БЕЗ выбора марки стали (швеллер гнутый - коэффициенты уже включают плотность)
     const TYPES_WITHOUT_STEEL = ['shveller_gnyt', 'shveller_gnyt_ocink'];
+
+    // Дефолтные марки стали для конкретных типов металла (если не задана пользователем)
+    const DEFAULT_STEEL_BY_METAL = {
+        'sheet_galv': 'ст08пс',  // Оцинкованные листы/рулоны - ст08пс по ГОСТ 14918
+        'sheet_painted': 'ст08пс'  // Окрашенные тоже на основе оцинкованной 08пс
+    };
+
+    function getDefaultSteelForMetal(metalKey) {
+        return DEFAULT_STEEL_BY_METAL[metalKey] || 'ст3';
+    }
+
+    // Нормализация марки стали из бэкенда (AI парсер часто шлёт "Ст3" с заглавной)
+    // и применение специфичного дефолта для металла
+    function resolveSteelGrade(provided, metalKey) {
+        const metalDefault = getDefaultSteelForMetal(metalKey);
+        if (!provided) return metalDefault;
+        const lower = String(provided).toLowerCase().trim();
+        // Если backend прислал generic ст3, но у металла есть специфичный дефолт - используем его
+        if (lower === 'ст3' && metalDefault !== 'ст3') {
+            return metalDefault;
+        }
+        // Иначе нормализуем кейс по STEEL_GRADES
+        const match = STEEL_GRADES.find(g => g.value.toLowerCase() === lower);
+        return match ? match.value : provided;
+    }
 
     // Стандартные длины для типов
     const STANDARD_LENGTHS = {
@@ -1031,6 +1059,7 @@
         { value: 'ст2', name: 'ст2', density: 7.85 },
         { value: 'ст3', name: 'ст3', density: 7.85 },
         { value: 'ст08', name: 'ст08', density: 7.871 },
+        { value: 'ст08пс', name: 'ст08пс', density: 7.871 },
         { value: 'ст10', name: 'ст10', density: 7.856 },
         { value: 'ст15', name: 'ст15', density: 7.85 },
         { value: 'ст20', name: 'ст20', density: 7.859 },
@@ -1306,6 +1335,7 @@
         const hasLengthPiece = TYPES_WITH_LENGTH_PIECE.includes(metalKey);
         const noPieces = TYPES_WITHOUT_PIECES.includes(metalKey);
         const hasStandards = TYPES_WITH_STANDARDS.includes(metalKey);
+        const hasStandardAndSteel = TYPES_WITH_STANDARD_AND_STEEL.includes(metalKey);
         const noSteel = TYPES_WITHOUT_STEEL.includes(metalKey);
 
         return {
@@ -1315,7 +1345,7 @@
             showLengthPiece: hasLengthPiece && !isSheet,  // Длина 1 шт
             showWidth: isSheet,  // Ширина листа
             showLengthSheet: isSheet,  // Длина листа
-            showSteel: !hasStandards && !noSteel,  // Марка стали (не для профнастила, рельсов и швеллера гнутого)
+            showSteel: (!hasStandards || hasStandardAndSteel) && !noSteel,  // Марка стали
             showStandard: hasStandards,  // Стандарт (для профнастила и рельсов)
             isSheet,
             isFastener
@@ -1693,7 +1723,7 @@
             // ✅ Для листов: дефолтные размеры из standardSizes базы данных
             width: item.width || item.ширина || getDefaultSheetWidth(metalKey),
             length_sheet: item.length_sheet || item.длина_листа || getDefaultSheetLength(metalKey),
-            steel_grade: item.steel_grade || item.марка_стали || 'ст3',
+            steel_grade: resolveSteelGrade(item.steel_grade || item.марка_стали, metalKey),
             raw_text: item.raw_text || metalName,
             original_weight: originalWeight,  // ✅ Исходный вес из заявки
             _config: config
@@ -1815,20 +1845,21 @@
 
             <!-- Марка стали / Стандарт -->
             <td class="px-2 py-2 col-steel">
-                ${config.showStandard ? `
-                    <select class="table-select" onchange="onFieldChange(${index}, 'standard', this.value)">
-                        ${(() => {
-                            const standards = getStandardsForMetal(item.metal_key, item.size);
-                            if (standards.length === 0) return '<option value="">-- Выберите размер --</option>';
-                            return standards.map(s => `<option value="${s.name}" ${s.name === item.standard ? 'selected' : ''}>${s.name}</option>`).join('');
-                        })()}
-                    </select>
-                ` : config.showSteel ? `
-                    <select class="table-select" onchange="onFieldChange(${index}, 'steel_grade', this.value)">
-                        ${STEEL_GRADES.map(g => `<option value="${g.value}" ${g.value === item.steel_grade ? 'selected' : ''}>${g.name}</option>`).join('')}
-                    </select>
-                ` : `
-                    <span class="text-gray-400">—</span>
+                ${(!config.showStandard && !config.showSteel) ? `<span class="text-gray-400">—</span>` : `
+                    ${config.showStandard ? `
+                        <select class="table-select" onchange="onFieldChange(${index}, 'standard', this.value)">
+                            ${(() => {
+                                const standards = getStandardsForMetal(item.metal_key, item.size);
+                                if (standards.length === 0) return '<option value="">-- Выберите размер --</option>';
+                                return standards.map(s => `<option value="${s.name}" ${s.name === item.standard ? 'selected' : ''}>${s.name}</option>`).join('');
+                            })()}
+                        </select>
+                    ` : ''}
+                    ${config.showSteel ? `
+                        <select class="table-select ${config.showStandard ? 'mt-1' : ''}" onchange="onFieldChange(${index}, 'steel_grade', this.value)">
+                            ${STEEL_GRADES.map(g => `<option value="${g.value}" ${g.value === item.steel_grade ? 'selected' : ''}>${g.name}</option>`).join('')}
+                        </select>
+                    ` : ''}
                 `}
             </td>
 
@@ -1894,6 +1925,7 @@
 
     function onMetalChange(index, metalKey) {
         const item = state.items[index];
+        const prevKey = item.metal_key;
         item.metal_key = metalKey;
 
         const metal = state.metalsDB?.[metalKey];
@@ -1905,6 +1937,15 @@
             // Установить стандартную длину
             if (STANDARD_LENGTHS[metalKey]) {
                 item.length_per_piece = STANDARD_LENGTHS[metalKey][0];
+            }
+
+            // Авто-смена дефолта стали: если у пользователя стояла дефолтная марка
+            // от прошлого металла - подменяем на дефолт нового металла.
+            // Кастомный выбор пользователя (не равный prevDefault) не трогаем.
+            const newDefault = getDefaultSteelForMetal(metalKey);
+            const prevDefault = getDefaultSteelForMetal(prevKey);
+            if (!item.steel_grade || item.steel_grade === prevDefault) {
+                item.steel_grade = newDefault;
             }
         }
 
@@ -3261,7 +3302,7 @@
 
                         // Стандарты и марка стали
                         gost: metalDB.gost || metalDB.standard || '',
-                        steel_grade: item.steel_grade || item.steel_type || 'ст3',
+                        steel_grade: resolveSteelGrade(item.steel_grade || item.steel_type, item.metal_key),
 
                         // Единица измерения
                         unit: item.unit || 'шт',
