@@ -1,0 +1,136 @@
+# MSG Закупки — Caddy конфигурация
+# Reverse proxy для app.msgzakupki.ru и n8n.msgzakupki.ru
+# Автоматический SSL Let's Encrypt
+# DNS уже настроен: оба поддомена → 95.214.63.15
+
+# ─────────────────────────────────────────────────────────────────
+# Глобальные настройки
+# ─────────────────────────────────────────────────────────────────
+{
+	# Email для Let's Encrypt уведомлений (об истечении и т.п.)
+	email zakup@msgnn.ru
+
+	# Production ACME (по умолчанию Caddy уже использует production Let's Encrypt)
+	# Для тестов можно переключить на staging:
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+
+	# Логи в stdout (читаются через docker logs)
+	log {
+		output stdout
+		format console
+		level INFO
+	}
+}
+
+# ─────────────────────────────────────────────────────────────────
+# Общие сниппеты — безопасные HTTP-заголовки
+# ─────────────────────────────────────────────────────────────────
+(security_headers) {
+	header {
+		# HSTS — браузер запоминает HTTPS на 2 года
+		# preload не включаем пока инфра не стабилизировалась — это необратимая
+		# подписка на список preload Chrome/Firefox/Safari на годы вперёд.
+		# Добавить preload в этап 6 (финализация миграции) когда DNS точно не будет меняться.
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+
+		# Защита от clickjacking
+		X-Frame-Options "DENY"
+
+		# Защита от MIME sniffing
+		X-Content-Type-Options "nosniff"
+
+		# Referrer policy — отправляем только origin при cross-origin
+		Referrer-Policy "strict-origin-when-cross-origin"
+
+		# Permissions policy — отключаем ненужные API
+		Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
+
+		# Прячем версию Caddy
+		-Server
+	}
+}
+
+# ─────────────────────────────────────────────────────────────────
+# n8n.msgzakupki.ru — workflow engine
+# ─────────────────────────────────────────────────────────────────
+n8n.msgzakupki.ru {
+	import security_headers
+
+	# n8n шлёт webhooks внешним сервисам, поэтому CSP мягкий
+	header Content-Security-Policy "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:; connect-src 'self' https: wss:; img-src 'self' data: blob: https:; frame-ancestors 'none';"
+
+	# Файлы n8n могут быть большие (Excel, PDF от парсера)
+	request_body {
+		max_size 50MB
+	}
+
+	reverse_proxy n8n:5678 {
+		# Передаём оригинальные заголовки клиента
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+
+		# n8n использует WebSocket для UI и реалтайм
+		# Caddy 2 автоматически проксирует WS, отдельной конфигурации не нужно
+
+		# Healthcheck path
+		health_uri /healthz
+		health_interval 30s
+		health_timeout 5s
+	}
+
+	# Дополнительный лог запросов в n8n (для отладки)
+	log {
+		output file /data/access-n8n.log {
+			roll_size 100mb
+			roll_keep 7
+		}
+		format json
+	}
+}
+
+# ─────────────────────────────────────────────────────────────────
+# app.msgzakupki.ru — SvelteKit фронт (этап 0d+)
+# Пока app не запущен — возвращаем 503 с понятным сообщением
+# ─────────────────────────────────────────────────────────────────
+app.msgzakupki.ru {
+	import security_headers
+
+	# Строгий CSP для SvelteKit (раскомментировать когда app будет запущен)
+	# header Content-Security-Policy "default-src 'self' https://*.supabase.co; connect-src 'self' https://*.supabase.co https://n8n.msgzakupki.ru wss://*.supabase.co; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-ancestors 'none';"
+
+	# Пока app не запущен — возвращаем 503 + стандартный HTML
+	# (когда поднимем app:3000 — заменить на reverse_proxy app:3000)
+	respond 503 {
+		body "MSG Закупки — приложение в процессе миграции. Скоро здесь будет новый интерфейс. Пока используйте https://lamblackout.github.io/msgnn-calculator/"
+		close
+	}
+
+	# После запуска app раскомментировать:
+	# reverse_proxy app:3000 {
+	#   header_up X-Real-IP {remote_host}
+	#   header_up X-Forwarded-For {remote_host}
+	#   header_up X-Forwarded-Proto {scheme}
+	#   header_up X-Forwarded-Host {host}
+	#
+	#   health_uri /api/healthcheck
+	#   health_interval 30s
+	# }
+}
+
+# ─────────────────────────────────────────────────────────────────
+# msgzakupki.ru (apex) — редирект на app.msgzakupki.ru
+# ─────────────────────────────────────────────────────────────────
+msgzakupki.ru {
+	import security_headers
+	redir https://app.msgzakupki.ru{uri} permanent
+}
+
+# ─────────────────────────────────────────────────────────────────
+# www.msgzakupki.ru — редирект на apex (потом — на app)
+# ─────────────────────────────────────────────────────────────────
+www.msgzakupki.ru {
+	import security_headers
+	redir https://app.msgzakupki.ru{uri} permanent
+}

@@ -8,6 +8,36 @@ node_modules/
 *.env
 .env.*
 credentials.json
+# Но .env.example — это публичный образец, его коммитим
+!*.env.example
+!.env.example
+
+# Доступы к системам (локальный файл с паролями) — НЕ коммитить
+Доступы_к_системам_MSG*.docx
+Доступы_к_системам_MSG*.md
+
+# Реальные secrets в Docker secrets — НЕ коммитить, но .gitkeep оставить
+# чтобы папка попала в git (на VPS она нужна для docker compose secrets)
+infra/secrets/*
+!infra/secrets/.gitkeep
+infra/.env
+
+# Beget скриншоты процесса регистрации — локальные, не для git
+beget-*.png
+
+# Playwright auto-сохранения и временные файлы
+.playwright-mcp/
+
+# Файл nul (накопился случайно)
+nul
+
+# Временные эксперименты
+tmp*.js
+tmp*.json
+
+# Локальные настройки Claude в .claude/ (settings.local.json и т.п. — содержат IDE-специфичное)
+# План `.claude/plans/` — оставляем в git, это публичная архитектура проекта
+.claude/settings.local.json
 
 # IDE
 .vscode/

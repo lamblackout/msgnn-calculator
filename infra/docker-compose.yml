@@ -1,0 +1,216 @@
+# MSG Закупки — production docker-compose
+# Хост: Beget VPS msg-prod (2 CPU / 4 GB RAM / 40 GB NVMe)
+# Домен: msgzakupki.ru → 95.214.63.15
+#
+# Запуск:
+#   1. Создать /srv/msg-zakupki/.env из .env.example
+#   2. Создать /srv/msg-zakupki/secrets/ с файлами:
+#      - pg_password.txt  (для Postgres под n8n)
+#      - n8n_encryption_key.txt  (КРИТИЧНО: тот же что был на Railway, иначе credentials не расшифруются)
+#   3. docker compose up -d
+#
+# См. README.md для полной инструкции.
+
+services:
+  # ─────────────────────────────────────────────────────────────────
+  # Caddy — reverse proxy + автоматический SSL Let's Encrypt
+  # ─────────────────────────────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    container_name: msg-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - msg-net
+    depends_on:
+      n8n:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # ─────────────────────────────────────────────────────────────────
+  # Postgres для n8n (отдельная БД от Supabase Cloud)
+  # ─────────────────────────────────────────────────────────────────
+  pg-n8n:
+    image: postgres:16-alpine
+    container_name: msg-pg-n8n
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: n8n
+      POSTGRES_USER: n8n
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - pg_n8n_data:/var/lib/postgresql/data
+    secrets:
+      - pg_password
+    networks:
+      - msg-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U n8n -d n8n"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ─────────────────────────────────────────────────────────────────
+  # n8n — workflow engine (мигрируется с Railway)
+  #
+  # Внимание: n8n НЕ поддерживает суффикс _FILE для env-переменных (это
+  # соглашение только некоторых образов: Postgres, Redis). Поэтому
+  # пароль PG и ключ шифрования читаем из /run/secrets/* через
+  # entrypoint-обёртку и экспортируем как обычные env vars перед запуском.
+  # ─────────────────────────────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:1.70.0   # фиксируем версию для воспроизводимости (последний stable на май 2026, см. https://github.com/n8n-io/n8n/releases)
+    container_name: msg-n8n
+    restart: unless-stopped
+    user: "node"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        export DB_POSTGRESDB_PASSWORD="$(cat /run/secrets/pg_password)"
+        export N8N_ENCRYPTION_KEY="$(cat /run/secrets/n8n_encryption_key)"
+        if [ -z "$$N8N_ENCRYPTION_KEY" ]; then
+          echo "FATAL: N8N_ENCRYPTION_KEY пустой — n8n сгенерирует случайный, credentials с Railway расшифровать не получится"
+          exit 1
+        fi
+        if [ -z "$$DB_POSTGRESDB_PASSWORD" ]; then
+          echo "FATAL: DB_POSTGRESDB_PASSWORD пустой — n8n не подключится к Postgres"
+          exit 1
+        fi
+        # Делегируем запуск родному entrypoint образа n8n (он вызывает tini и /usr/local/bin/n8n)
+        exec /docker-entrypoint.sh
+    environment:
+      # База (пароль подставляется entrypoint-обёрткой)
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: pg-n8n
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+
+      # Веб-доступ через Caddy
+      N8N_HOST: n8n.msgzakupki.ru
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://n8n.msgzakupki.ru/
+      N8N_PORT: 5678
+      N8N_LISTEN_ADDRESS: 0.0.0.0
+      N8N_PROXY_HOPS: "1"   # доверяем 1 прокси (Caddy)
+      N8N_EDITOR_BASE_URL: https://n8n.msgzakupki.ru/
+
+      # Безопасность
+      N8N_BASIC_AUTH_ACTIVE: "false"   # SSO через Supabase Auth позже, пока публичный доступ только на этапе миграции
+      N8N_USER_MANAGEMENT_DISABLED: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_HIRING_BANNER_ENABLED: "false"
+
+      # Часовой пояс
+      GENERIC_TIMEZONE: Europe/Moscow
+      TZ: Europe/Moscow
+
+      # Логи
+      N8N_LOG_LEVEL: info
+
+      # Лимиты (для 4GB RAM сервера)
+      EXECUTIONS_PROCESS: main
+      EXECUTIONS_TIMEOUT: 600
+      EXECUTIONS_TIMEOUT_MAX: 7200
+      EXECUTIONS_DATA_SAVE_ON_ERROR: all
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
+      EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "true"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: 720    # 30 дней
+    volumes:
+      - n8n_data:/home/node/.n8n
+    secrets:
+      - pg_password
+      - n8n_encryption_key
+    networks:
+      - msg-net
+    depends_on:
+      pg-n8n:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1500M
+
+  # ─────────────────────────────────────────────────────────────────
+  # app — SvelteKit (поднимается на этапе 0d, пока placeholder)
+  # Закомментировано до момента когда у нас будет образ
+  # ─────────────────────────────────────────────────────────────────
+  # app:
+  #   image: ghcr.io/lamblackout/msgnn-calculator-app:latest
+  #   container_name: msg-app
+  #   restart: unless-stopped
+  #   environment:
+  #     NODE_ENV: production
+  #     PORT: 3000
+  #     ORIGIN: https://app.msgzakupki.ru
+  #     SUPABASE_URL: ${SUPABASE_URL}
+  #     SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+  #     SUPABASE_SERVICE_ROLE_KEY_FILE: /run/secrets/supabase_service_role
+  #   secrets:
+  #     - supabase_service_role
+  #   networks:
+  #     - msg-net
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/healthcheck"]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 30s
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 512M
+
+volumes:
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+  pg_n8n_data:
+    driver: local
+  n8n_data:
+    driver: local
+
+networks:
+  msg-net:
+    driver: bridge
+
+secrets:
+  pg_password:
+    file: ./secrets/pg_password.txt
+  n8n_encryption_key:
+    file: ./secrets/n8n_encryption_key.txt
+  # supabase_service_role:
+  #   file: ./secrets/supabase_service_role.txt
